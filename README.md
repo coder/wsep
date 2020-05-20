@@ -32,7 +32,7 @@ JSON header, the next message is the binary body. The advantage of this striping
 - ease of debugging in the Chrome WebSocket message viewer
 - human readable headers
 
-Some messages may send a zero sized body.
+Some messages may omit the body.
 
 The overhead of the additional frame is 2 to 6 bytes. In high throughput cases, messages contain ~32KB of data,
 so this overhead is negligible.
