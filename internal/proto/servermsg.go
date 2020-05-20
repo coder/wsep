@@ -1,5 +1,12 @@
 package proto
 
+const (
+	TypePid      = "pid"
+	TypeStdout   = "stdout"
+	TypeStderr   = "stderr"
+	TypeExitCode = "exit_code"
+)
+
 type ServerPidHeader struct {
 	Pid int `json:"pid"`
 }

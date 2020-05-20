@@ -61,6 +61,9 @@ func Serve(ctx context.Context, c *websocket.Conn, execer Execer) error {
 			if err != nil {
 				return err
 			}
+			go func() {
+				process.Stdout()
+			}()
 		case proto.TypeResize:
 			if process == nil {
 				return errors.New("resize sent before command started")
