@@ -78,6 +78,14 @@ No more Stdin messages may be sent after this.
 
 ### Server Messages
 
+#### Pid
+
+This is sent immediately after the command starts.
+
+```json
+{"type":  "pid", "pid":  0}
+```
+
 #### Stdout
 
 ```json
