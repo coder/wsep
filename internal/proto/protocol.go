@@ -4,3 +4,4 @@ package proto
 type Header struct {
 	Type string `json:"type"`
 }
+
