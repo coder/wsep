@@ -1,5 +1,12 @@
 package proto
 
+const (
+	TypeStart      = "start"
+	TypeResize     = "resize_header"
+	TypeStdin      = "stdin"
+	TypeCloseStdin = "close_stdin"
+)
+
 type ClientStartHeader struct {
 	Command string   `json:"command"`
 	Args    []string `json:"args"`
@@ -7,6 +14,6 @@ type ClientStartHeader struct {
 }
 
 type ClientResizeHeader struct {
-	Height int `json:"height"`
-	Width  int `json:"width"`
+	Rows uint16 `json:"rows"`
+	Cols uint16 `json:"cols"`
 }

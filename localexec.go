@@ -44,6 +44,16 @@ func (l *localProcess) Close() error {
 	return l.cmd.Process.Kill()
 }
 
+func (l *localProcess) Resize(rows, cols uint16) error {
+	if l.tty == nil {
+		return nil
+	}
+	return pty.Setsize(l.tty, &pty.Winsize{
+		Rows: rows,
+		Cols: cols,
+	})
+}
+
 func (l *localProcess) Pid() int {
 	return l.cmd.Process.Pid
 }

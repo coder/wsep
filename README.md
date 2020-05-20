@@ -63,7 +63,7 @@ and a body follows.
 #### Resize
 
 ```json
-{"type":  "resize", "height":  80, "width": 80}
+{"type":  "resize", "cols":  80, "rows": 80}
 ```
 
 Only valid on tty messages.
