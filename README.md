@@ -11,31 +11,31 @@ with WebSocket so it may be used directly by a browser frontend.
 ### Client
 
 ```go
-	conn, _, err := websocket.Dial(ctx, "ws://remote.exec.addr", nil)
-	if err != nil {
-    // handle error
-  }
-	defer conn.Close(websocket.StatusAbnormalClosure, "terminate process")
+conn, _, err := websocket.Dial(ctx, "ws://remote.exec.addr", nil)
+if err != nil {
+  // handle error
+}
+defer conn.Close(websocket.StatusAbnormalClosure, "terminate process")
 
-	executor := wsep.RemoteExecer(conn)
-	process, err := executor.Start(ctx, proto.Command{
-    Command: "cat",
-    Args: []string{"go.mod"},
-	})
-	if err != nil {
-    // handle error
-  }
+executor := wsep.RemoteExecer(conn)
+process, err := executor.Start(ctx, proto.Command{
+  Command: "cat",
+  Args: []string{"go.mod"},
+})
+if err != nil {
+  // handle error
+}
 
-	go io.Copy(os.Stdout, process.Stdout())
-	go io.Copy(os.Stderr, process.Stderr())
+go io.Copy(os.Stdout, process.Stdout())
+go io.Copy(os.Stderr, process.Stderr())
 
-	err = process.Wait()
-	if err != nil {
-    // process failed
-    return
-  }
+err = process.Wait()
+if err != nil {
+  // process failed
+} else {
   // process succeeded
-  conn.Close(websocket.StatusNormalClosure, "normal closure")
+}
+conn.Close(websocket.StatusNormalClosure, "normal closure")
 ```
 
 ### Server
