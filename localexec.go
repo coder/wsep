@@ -72,13 +72,8 @@ func (l LocalExecer) Start(ctx context.Context, c proto.Command) (Process, error
 		err     error
 	)
 	process.cmd = exec.Command(c.Command, c.Args...)
-
-	if process.cmd.Env != nil {
-		process.cmd.Env = c.Env
-	}
-	if process.cmd.Dir != "" {
-		process.cmd.Dir = c.WorkingDir
-	}
+	process.cmd.Env = c.Env
+	process.cmd.Dir = c.WorkingDir
 
 	if c.GID != 0 || c.UID != 0 {
 		process.cmd.SysProcAttr = &syscall.SysProcAttr{
