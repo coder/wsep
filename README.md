@@ -1,7 +1,6 @@
 # wsep
 
-`wsep` is a high performance, WebSocket-based command execution protocol. It can be thought of as SSH without
-encryption.
+`wsep` is a high performance, ***W***eb***S***ocket command ***e***xecution ***p***rotocol. It can be thought of as SSH without encryption.
 
 It's useful in cases where you want to provide a command exec interface into a remote environment. It's implemented
 with WebSocket so it may be used directly by a browser frontend.
