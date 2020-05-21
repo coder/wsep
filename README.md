@@ -10,7 +10,7 @@ with WebSocket so it may be used directly by a browser frontend.
 
 ### Client
 
-```go
+```golang
 conn, _, err := websocket.Dial(ctx, "ws://remote.exec.addr", nil)
 if err != nil {
   // handle error
@@ -28,6 +28,7 @@ if err != nil {
 
 go io.Copy(os.Stdout, process.Stdout())
 go io.Copy(os.Stderr, process.Stderr())
+go io.Copy(process.Stdin(), os.Stdin)
 
 err = process.Wait()
 if err != nil {
@@ -40,7 +41,7 @@ conn.Close(websocket.StatusNormalClosure, "normal closure")
 
 ### Server
 
-```go
+```golang
 func (s Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ws, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
 	if err != nil {

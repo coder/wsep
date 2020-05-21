@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"io/ioutil"
 	"net"
 	"sync"
 
@@ -32,17 +31,19 @@ func Serve(ctx context.Context, c *websocket.Conn, execer Execer) error {
 		}
 	}()
 	for {
-		_, reader, err := c.Reader(ctx)
-		if xerrors.Is(err, io.EOF) {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		_, byt, err := c.Read(ctx)
+		if err != nil {
+			status := websocket.CloseStatus(err)
+			if status == -1 {
+				return xerrors.Errorf("read message: %w", err)
+			}
+			if status != websocket.StatusNormalClosure {
+				return err
+			}
 			return nil
-		}
-		if err != nil {
-			return xerrors.Errorf("get reader: %w", err)
-		}
-		// Allocate, because we have to read header twice.
-		byt, err := ioutil.ReadAll(reader)
-		if err != nil {
-			return xerrors.Errorf("read header: %w", err)
 		}
 		headerByt, bodyByt := proto.SplitMessage(byt)
 
@@ -67,6 +68,7 @@ func Serve(ctx context.Context, c *websocket.Conn, execer Execer) error {
 			go pipeProcessOutput(ctx, process, wsNetConn)
 
 			go func() {
+				defer wsNetConn.Close()
 				err = process.Wait()
 				if exitErr, ok := err.(*ExitError); ok {
 					sendExitCode(ctx, exitErr.Code, wsNetConn)

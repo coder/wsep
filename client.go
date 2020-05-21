@@ -90,11 +90,7 @@ func (r remoteProcess) pipeStdin(ctx context.Context) {
 	}
 	stdinWriter := proto.WithHeader(wsNetConn, headerByt)
 
-	_, err = io.Copy(stdinWriter, r.stdin.r)
-	if err != nil {
-		flog.Error("failed to copy stdin: %w", err)
-	}
-	flog.Info("finished copying stdin")
+	io.Copy(stdinWriter, r.stdin.r)
 }
 
 func (r remoteProcess) listen(ctx context.Context) {
