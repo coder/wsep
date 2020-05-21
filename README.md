@@ -26,11 +26,7 @@ there's a large gap we can close.
 
 ## Protocol
 
-Each Message is represented as two WebSocket messages. The first one is a Text message that contains a
-JSON header, the next message is the binary body. The advantage of this striping mechanism is
-
-- ease of debugging in the Chrome WebSocket message viewer
-- human readable headers
+Each Message is represented as a single WebSocket message. A newline character separates a JSON header from the binary body.
 
 Some messages may omit the body.
 
@@ -58,12 +54,12 @@ This must be the first Client message.
 { "type": "stdin" }
 ```
 
-and a body follows.
+and a body follows after a newline character.
 
 #### Resize
 
 ```json
-{"type":  "resize", "cols":  80, "rows": 80}
+{ "type": "resize", "cols": 80, "rows": 80 }
 ```
 
 Only valid on tty messages.
@@ -83,7 +79,7 @@ No more Stdin messages may be sent after this.
 This is sent immediately after the command starts.
 
 ```json
-{"type":  "pid", "pid":  0}
+{ "type": "pid", "pid": 0 }
 ```
 
 #### Stdout
@@ -92,7 +88,7 @@ This is sent immediately after the command starts.
 { "type": "stdout" }
 ```
 
-and a body follows.
+and a body follows after a newline character.
 
 #### Stderr
 
@@ -100,7 +96,7 @@ and a body follows.
 { "type": "stderr" }
 ```
 
-and a body follows.
+and a body follows after a newline character.
 
 #### ExitCode
 
@@ -111,4 +107,3 @@ This is the last message sent by the server.
 ```
 
 A normal closure follows.
-

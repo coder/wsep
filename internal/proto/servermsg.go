@@ -8,9 +8,11 @@ const (
 )
 
 type ServerPidHeader struct {
-	Pid int `json:"pid"`
+	Type string `json:"type"`
+	Pid  int    `json:"pid"`
 }
 
 type ServerExitCodeHeader struct {
-	ExitCode int `json:"exit_code"`
+	Type     string `json:"type"`
+	ExitCode int    `json:"exit_code"`
 }

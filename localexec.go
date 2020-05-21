@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"syscall"
 
 	"github.com/creack/pty"
 	"golang.org/x/xerrors"
@@ -37,7 +38,13 @@ func (l *localProcess) Stderr() io.Reader {
 }
 
 func (l *localProcess) Wait() error {
-	return l.cmd.Wait()
+	err := l.cmd.Wait()
+	if exitErr, ok := err.(*exec.ExitError); ok {
+		return &ExitError{
+			Code: exitErr.ExitCode(),
+		}
+	}
+	return err
 }
 
 func (l *localProcess) Close() error {
@@ -63,9 +70,23 @@ func (l LocalExecer) Start(ctx context.Context, c Command) (Process, error) {
 		process localProcess
 	)
 	process.cmd = exec.Command(c.Command, c.Args...)
+	process.cmd.Env = c.Env
+	process.cmd.Dir = c.WorkingDir
+
+	if c.GID != 0 || c.UID != 0 {
+		process.cmd.SysProcAttr = &syscall.SysProcAttr{
+			Credential: &syscall.Credential{},
+		}
+	}
+	if c.GID != 0 {
+		process.cmd.SysProcAttr.Credential.Gid = c.GID
+	}
+	if c.UID != 0 {
+		process.cmd.SysProcAttr.Credential.Gid = c.UID
+	}
 
 	var (
-		err     error
+		err error
 	)
 
 	process.stdin, err = process.cmd.StdinPipe()

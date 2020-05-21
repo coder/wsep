@@ -8,9 +8,13 @@ const (
 )
 
 type ClientStartHeader struct {
-	Command string   `json:"command"`
-	Args    []string `json:"args"`
-	TTY     bool     `json:"tty"`
+	Command    string   `json:"command"`
+	Args       []string `json:"args"`
+	TTY        bool     `json:"tty"`
+	UID        uint32   `json:"uid"`
+	GID        uint32   `json:"gid"`
+	Env        []string `json:"env"`
+	WorkingDir string   `json:"working_dir"`
 }
 
 type ClientResizeHeader struct {

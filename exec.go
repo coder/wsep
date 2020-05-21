@@ -2,19 +2,28 @@ package wsep
 
 import (
 	"context"
+	"fmt"
 	"io"
 )
 
 // Command represents a runnable command.
 type Command struct {
-	Command string
-	Args    []string
-	TTY     bool
+	Command    string
+	Args       []string
+	TTY        bool
+	Env        []string
+	WorkingDir string
+	GID        uint32
+	UID        uint32
 }
 
 // ExitError is sent when the command terminates.
 type ExitError struct {
 	Code int
+}
+
+func (e ExitError) Error() string {
+	return fmt.Sprintf("process exited with code %v", e.Code)
 }
 
 // Process represents a started command.
@@ -36,4 +45,3 @@ type Process interface {
 type Execer interface {
 	Start(ctx context.Context, c Command) (Process, error)
 }
-
