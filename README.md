@@ -56,6 +56,21 @@ func (s Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 ```
 
+### Development / Testing
+
+Start a local executor:
+
+```
+go run ./dev/server
+```
+
+Start a client:
+
+```
+go run ./dev/client tty bash
+go run ./dev/client notty ls
+```
+
 ### Performance Goals
 
 Test command
