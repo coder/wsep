@@ -4,18 +4,9 @@ import (
 	"context"
 	"fmt"
 	"io"
-)
 
-// Command represents a runnable command.
-type Command struct {
-	Command    string
-	Args       []string
-	TTY        bool
-	Env        []string
-	WorkingDir string
-	GID        uint32
-	UID        uint32
-}
+	"cdr.dev/wsep/internal/proto"
+)
 
 // ExitError is sent when the command terminates.
 type ExitError struct {
@@ -43,5 +34,5 @@ type Process interface {
 
 // Execer starts commands.
 type Execer interface {
-	Start(ctx context.Context, c Command) (Process, error)
+	Start(ctx context.Context, c proto.Command) (Process, error)
 }

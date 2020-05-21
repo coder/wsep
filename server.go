@@ -10,6 +10,7 @@ import (
 	"net"
 	"sync"
 
+	"go.coder.com/flog"
 	"golang.org/x/xerrors"
 	"nhooyr.io/websocket"
 
@@ -20,7 +21,7 @@ import (
 // The execer may be another wsep connection for chaining.
 // Use LocalExecer for local command execution.
 func Serve(ctx context.Context, c *websocket.Conn, execer Execer) error {
-	wsNetConn := websocket.NetConn(ctx, c, websocket.MessageText)
+	wsNetConn := websocket.NetConn(ctx, c, websocket.MessageBinary)
 	var (
 		header  proto.Header
 		process Process
@@ -32,12 +33,9 @@ func Serve(ctx context.Context, c *websocket.Conn, execer Execer) error {
 		}
 	}()
 	for {
-		typ, reader, err := c.Reader(ctx)
+		_, reader, err := c.Reader(ctx)
 		if err != nil {
 			return xerrors.Errorf("get reader: %w", err)
-		}
-		if typ != websocket.MessageText {
-			return xerrors.Errorf("expected text message first: %w", err)
 		}
 		// Allocate, because we have to read header twice.
 		byt, err := ioutil.ReadAll(reader)
@@ -59,15 +57,7 @@ func Serve(ctx context.Context, c *websocket.Conn, execer Execer) error {
 			if err != nil {
 				return xerrors.Errorf("unmarshal start header: %w", err)
 			}
-			process, err = execer.Start(ctx, Command{
-				Command:    header.Command,
-				Args:       header.Args,
-				TTY:        header.TTY,
-				Env:        header.Env,
-				GID:        header.GID,
-				UID:        header.UID,
-				WorkingDir: header.WorkingDir,
-			})
+			process, err = execer.Start(ctx, header.Command)
 			if err != nil {
 				return err
 			}
@@ -78,9 +68,10 @@ func Serve(ctx context.Context, c *websocket.Conn, execer Execer) error {
 			err = process.Wait()
 			if exitErr, ok := err.(*ExitError); ok {
 				sendExitCode(ctx, exitErr.Code, wsNetConn)
-				continue
+				return nil
 			}
 			sendExitCode(ctx, 0, wsNetConn)
+			return nil
 		case proto.TypeResize:
 			if process == nil {
 				return errors.New("resize sent before command started")
@@ -102,7 +93,7 @@ func Serve(ctx context.Context, c *websocket.Conn, execer Execer) error {
 				return xerrors.Errorf("read stdin: %w", err)
 			}
 		case proto.TypeCloseStdin:
-			wr, err := c.Writer(ctx, websocket.MessageText)
+			wr, err := c.Writer(ctx, websocket.MessageBinary)
 			if err != nil {
 				return xerrors.Errorf("get writer: %w", err)
 			}
@@ -110,6 +101,8 @@ func Serve(ctx context.Context, c *websocket.Conn, execer Execer) error {
 			if err != nil {
 				return xerrors.Errorf("encode close_stdin: %w", err)
 			}
+		default:
+			flog.Error("unrecognized header type: %s", header.Type)
 		}
 	}
 }

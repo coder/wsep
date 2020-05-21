@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"syscall"
 
+	"cdr.dev/wsep/internal/proto"
 	"github.com/creack/pty"
 	"golang.org/x/xerrors"
 )
@@ -65,7 +66,7 @@ func (l *localProcess) Pid() int {
 	return l.cmd.Process.Pid
 }
 
-func (l LocalExecer) Start(ctx context.Context, c Command) (Process, error) {
+func (l LocalExecer) Start(ctx context.Context, c proto.Command) (Process, error) {
 	var (
 		process localProcess
 	)

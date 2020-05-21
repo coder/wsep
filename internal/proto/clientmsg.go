@@ -7,7 +7,18 @@ const (
 	TypeCloseStdin = "close_stdin"
 )
 
+type ClientResizeHeader struct {
+	Rows uint16 `json:"rows"`
+	Cols uint16 `json:"cols"`
+}
+
 type ClientStartHeader struct {
+	Type    string  `json:"type"`
+	Command Command `json:"command"`
+}
+
+// Command represents a runnable command.
+type Command struct {
 	Command    string   `json:"command"`
 	Args       []string `json:"args"`
 	TTY        bool     `json:"tty"`
@@ -15,9 +26,4 @@ type ClientStartHeader struct {
 	GID        uint32   `json:"gid"`
 	Env        []string `json:"env"`
 	WorkingDir string   `json:"working_dir"`
-}
-
-type ClientResizeHeader struct {
-	Rows uint16 `json:"rows"`
-	Cols uint16 `json:"cols"`
 }

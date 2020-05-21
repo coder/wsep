@@ -14,12 +14,17 @@ type Header struct {
 const delimiter = '\n'
 
 // SplitMessage into header and body components
+// all messages must have a header. body returns as nil if no delimiter is found
 func SplitMessage(b []byte) (header []byte, body []byte) {
-	parts := bytes.SplitAfterN(b, []byte{delimiter}, 1)
-	if len(parts) == 1 {
-		return parts[0], nil
+	ix := bytes.IndexRune(b, delimiter)
+	if ix == -1 {
+		return b, nil
 	}
-	return parts[0], parts[1]
+	header = b[:ix]
+	if ix < len(b)-1 {
+		body = b[ix+1:]
+	}
+	return header, body
 }
 
 type headerWriter struct {
