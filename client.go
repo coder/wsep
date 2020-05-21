@@ -1,7 +1,6 @@
 package wsep
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -48,8 +47,8 @@ func (r remoteExec) Start(ctx context.Context, c proto.Command) (Process, error)
 		conn:   r.conn,
 		pid:    pidHeader.Pid,
 		done:   make(chan error),
-		stdout: bytes.NewBuffer(nil),
-		stderr: bytes.NewBuffer(nil),
+		stderr: newPipe(),
+		stdout: newPipe(),
 	}
 
 	go rp.listen(ctx)
@@ -61,12 +60,28 @@ type remoteProcess struct {
 	pid    int
 	done   chan error
 	stdin  io.WriteCloser
-	stdout *bytes.Buffer
-	stderr *bytes.Buffer
+	stdout pipe
+	stderr pipe
+}
+
+type pipe struct {
+	r *io.PipeReader
+	w *io.PipeWriter
+}
+
+func newPipe() pipe {
+	pr, pw := io.Pipe()
+	return pipe{
+		r: pr,
+		w: pw,
+	}
 }
 
 func (r remoteProcess) listen(ctx context.Context) {
 	defer r.conn.Close(websocket.StatusNormalClosure, "normal closure")
+	defer r.stdout.w.Close()
+	defer r.stderr.w.Close()
+
 	for {
 		if ctx.Err() != nil {
 			break
@@ -86,17 +101,9 @@ func (r remoteProcess) listen(ctx context.Context) {
 
 		switch header.Type {
 		case proto.TypeStderr:
-			_, err = r.stderr.Write(body)
-			if err != nil {
-				flog.Error("failed to write to stderr buffer: %v", err)
-				continue
-			}
+			go r.stderr.w.Write(body)
 		case proto.TypeStdout:
-			_, err = r.stdout.Write(body)
-			if err != nil {
-				flog.Error("failed to write to stdout buffer: %v", err)
-				continue
-			}
+			go r.stdout.w.Write(body)
 		case proto.TypeExitCode:
 			var exitMsg proto.ServerExitCodeHeader
 			err = json.Unmarshal(headerByt, &exitMsg)
@@ -124,11 +131,11 @@ func (r remoteProcess) Stdin() io.WriteCloser {
 }
 
 func (r remoteProcess) Stdout() io.Reader {
-	return r.stdout
+	return r.stdout.r
 }
 
 func (r remoteProcess) Stderr() io.Reader {
-	return r.stderr
+	return r.stderr.r
 }
 
 func (r remoteProcess) Resize(rows, cols uint16) error {
