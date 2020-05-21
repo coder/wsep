@@ -52,7 +52,7 @@ func (l *localProcess) Close() error {
 	return l.cmd.Process.Kill()
 }
 
-func (l *localProcess) Resize(rows, cols uint16) error {
+func (l *localProcess) Resize(ctx context.Context, rows, cols uint16) error {
 	if l.tty == nil {
 		return nil
 	}
@@ -71,8 +71,13 @@ func (l LocalExecer) Start(ctx context.Context, c proto.Command) (Process, error
 		process localProcess
 	)
 	process.cmd = exec.Command(c.Command, c.Args...)
-	process.cmd.Env = c.Env
-	process.cmd.Dir = c.WorkingDir
+
+	if process.cmd.Env != nil {
+		process.cmd.Env = c.Env
+	}
+	if process.cmd.Dir != "" {
+		process.cmd.Dir = c.WorkingDir
+	}
 
 	if c.GID != 0 || c.UID != 0 {
 		process.cmd.SysProcAttr = &syscall.SysProcAttr{
@@ -90,27 +95,29 @@ func (l LocalExecer) Start(ctx context.Context, c proto.Command) (Process, error
 		err error
 	)
 
-	process.stdin, err = process.cmd.StdinPipe()
-	if err != nil {
-		return nil, xerrors.Errorf("create pipe: %w", err)
-	}
-
-	process.stdout, err = process.cmd.StdoutPipe()
-	if err != nil {
-		return nil, xerrors.Errorf("create pipe: %w", err)
-	}
-
-	process.stderr, err = process.cmd.StderrPipe()
-	if err != nil {
-		return nil, xerrors.Errorf("create pipe: %w", err)
-	}
-
 	if c.TTY {
 		process.tty, err = pty.Start(process.cmd)
 		if err != nil {
 			return nil, xerrors.Errorf("start command with pty: %w", err)
 		}
+		process.stdout = process.tty
+		process.stderr = process.tty
+		process.stdin = process.tty
 	} else {
+		process.stdin, err = process.cmd.StdinPipe()
+		if err != nil {
+			return nil, xerrors.Errorf("create pipe: %w", err)
+		}
+
+		process.stdout, err = process.cmd.StdoutPipe()
+		if err != nil {
+			return nil, xerrors.Errorf("create pipe: %w", err)
+		}
+
+		process.stderr, err = process.cmd.StderrPipe()
+		if err != nil {
+			return nil, xerrors.Errorf("create pipe: %w", err)
+		}
 		err = process.cmd.Start()
 		if err != nil {
 			return nil, xerrors.Errorf("start command: %w", err)

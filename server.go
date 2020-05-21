@@ -21,11 +21,10 @@ import (
 // The execer may be another wsep connection for chaining.
 // Use LocalExecer for local command execution.
 func Serve(ctx context.Context, c *websocket.Conn, execer Execer) error {
-	wsNetConn := websocket.NetConn(ctx, c, websocket.MessageBinary)
 	var (
-		header  proto.Header
-		process Process
-		copyBuf = make([]byte, 32<<10)
+		header    proto.Header
+		process   Process
+		wsNetConn = websocket.NetConn(ctx, c, websocket.MessageBinary)
 	)
 	defer func() {
 		if process != nil {
@@ -34,6 +33,9 @@ func Serve(ctx context.Context, c *websocket.Conn, execer Execer) error {
 	}()
 	for {
 		_, reader, err := c.Reader(ctx)
+		if xerrors.Is(err, io.EOF) {
+			return nil
+		}
 		if err != nil {
 			return xerrors.Errorf("get reader: %w", err)
 		}
@@ -42,7 +44,6 @@ func Serve(ctx context.Context, c *websocket.Conn, execer Execer) error {
 		if err != nil {
 			return xerrors.Errorf("read header: %w", err)
 		}
-
 		headerByt, bodyByt := proto.SplitMessage(byt)
 
 		err = json.Unmarshal(headerByt, &header)
@@ -65,13 +66,14 @@ func Serve(ctx context.Context, c *websocket.Conn, execer Execer) error {
 			sendPID(ctx, process.Pid(), wsNetConn)
 			go pipeProcessOutput(ctx, process, wsNetConn)
 
-			err = process.Wait()
-			if exitErr, ok := err.(*ExitError); ok {
-				sendExitCode(ctx, exitErr.Code, wsNetConn)
-				return nil
-			}
-			sendExitCode(ctx, 0, wsNetConn)
-			return nil
+			go func() {
+				err = process.Wait()
+				if exitErr, ok := err.(*ExitError); ok {
+					sendExitCode(ctx, exitErr.Code, wsNetConn)
+					return
+				}
+				sendExitCode(ctx, 0, wsNetConn)
+			}()
 		case proto.TypeResize:
 			if process == nil {
 				return errors.New("resize sent before command started")
@@ -83,12 +85,12 @@ func Serve(ctx context.Context, c *websocket.Conn, execer Execer) error {
 				return xerrors.Errorf("unmarshal resize header: %w", err)
 			}
 
-			err = process.Resize(header.Rows, header.Cols)
+			err = process.Resize(ctx, header.Rows, header.Cols)
 			if err != nil {
 				return xerrors.Errorf("resize: %w", err)
 			}
 		case proto.TypeStdin:
-			_, err = io.CopyBuffer(process.Stdin(), bytes.NewReader(bodyByt), copyBuf)
+			_, err := io.Copy(process.Stdin(), bytes.NewReader(bodyByt))
 			if err != nil {
 				return xerrors.Errorf("read stdin: %w", err)
 			}

@@ -42,7 +42,11 @@ func WithHeader(w io.WriteCloser, header []byte) io.WriteCloser {
 
 func (h headerWriter) Write(b []byte) (int, error) {
 	msg := append(append(h.header, delimiter), b...)
-	return h.w.Write(msg)
+	_, err := h.w.Write(msg)
+	if err != nil {
+		return 0, err
+	}
+	return len(b), nil // TODO: potential buggy
 }
 
 func (h headerWriter) Close() error {

@@ -24,7 +24,7 @@ type Process interface {
 	Stdout() io.Reader
 	Stderr() io.Reader
 	// Resize resizes the TTY if a TTY is enabled.
-	Resize(rows, cols uint16) error
+	Resize(ctx context.Context, rows, cols uint16) error
 	// Wait returns ExitError when the command terminates.
 	Wait() error
 	// Close terminates the process and underlying connection(s).

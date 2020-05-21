@@ -49,6 +49,7 @@ func (r remoteExec) Start(ctx context.Context, c proto.Command) (Process, error)
 		done:   make(chan error),
 		stderr: newPipe(),
 		stdout: newPipe(),
+		stdin:  newPipe(),
 	}
 
 	go rp.listen(ctx)
@@ -59,7 +60,7 @@ type remoteProcess struct {
 	conn   *websocket.Conn
 	pid    int
 	done   chan error
-	stdin  io.WriteCloser
+	stdin  pipe
 	stdout pipe
 	stderr pipe
 }
@@ -77,20 +78,42 @@ func newPipe() pipe {
 	}
 }
 
+func (r remoteProcess) pipeStdin(ctx context.Context) {
+	wsNetConn := websocket.NetConn(ctx, r.conn, websocket.MessageBinary)
+	stdinHeader := proto.Header{
+		Type: proto.TypeStdin,
+	}
+
+	headerByt, err := json.Marshal(stdinHeader)
+	if err != nil {
+		flog.Error("failed to marshal stdin header")
+	}
+	stdinWriter := proto.WithHeader(wsNetConn, headerByt)
+
+	_, err = io.Copy(stdinWriter, r.stdin.r)
+	if err != nil {
+		flog.Error("failed to copy stdin: %w", err)
+	}
+	flog.Info("finished copying stdin")
+}
+
 func (r remoteProcess) listen(ctx context.Context) {
 	defer r.conn.Close(websocket.StatusNormalClosure, "normal closure")
 	defer r.stdout.w.Close()
 	defer r.stderr.w.Close()
+	defer r.stdin.r.Close()
+
+	go r.pipeStdin(ctx)
 
 	for {
-		if ctx.Err() != nil {
+		if err := ctx.Err(); err != nil {
+			r.done <- xerrors.Errorf("process canceled: %w", err)
 			break
 		}
 		_, payload, err := r.conn.Read(ctx)
 		if err != nil {
 			continue
 		}
-
 		headerByt, body := proto.SplitMessage(payload)
 
 		var header proto.Header
@@ -127,7 +150,7 @@ func (r remoteProcess) Pid() int {
 }
 
 func (r remoteProcess) Stdin() io.WriteCloser {
-	return nil
+	return r.stdin.w
 }
 
 func (r remoteProcess) Stdout() io.Reader {
@@ -138,8 +161,16 @@ func (r remoteProcess) Stderr() io.Reader {
 	return r.stderr.r
 }
 
-func (r remoteProcess) Resize(rows, cols uint16) error {
-	return nil
+func (r remoteProcess) Resize(ctx context.Context, rows, cols uint16) error {
+	header := proto.ClientResizeHeader{
+		Cols: cols,
+		Rows: rows,
+	}
+	payload, err := json.Marshal(header)
+	if err != nil {
+		return err
+	}
+	return r.conn.Write(ctx, websocket.MessageBinary, payload)
 }
 
 func (r remoteProcess) Wait() error {
