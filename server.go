@@ -121,7 +121,10 @@ func sendExitCode(ctx context.Context, exitCode int, conn net.Conn) {
 }
 
 func sendPID(ctx context.Context, pid int, conn net.Conn) {
-	header, _ := json.Marshal(proto.ServerPidHeader{Type: proto.TypePid, Pid: pid})
+	header, err := json.Marshal(proto.ServerPidHeader{Type: proto.TypePid, Pid: pid})
+	if err != nil {
+		return
+	}
 	proto.WithHeader(conn, header).Write(nil)
 }
 

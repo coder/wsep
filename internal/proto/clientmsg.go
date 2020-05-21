@@ -8,6 +8,7 @@ const (
 )
 
 type ClientResizeHeader struct {
+	Type string `json:"type"`
 	Rows uint16 `json:"rows"`
 	Cols uint16 `json:"cols"`
 }

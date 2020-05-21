@@ -129,7 +129,7 @@ func (r remoteProcess) listen(ctx context.Context) {
 		var header proto.Header
 		err = json.Unmarshal(headerByt, &header)
 		if err != nil {
-			flog.Fatal("failed to unmarshal header: %w", err)
+			continue
 		}
 
 		switch header.Type {
@@ -173,6 +173,7 @@ func (r remoteProcess) Stderr() io.Reader {
 
 func (r remoteProcess) Resize(ctx context.Context, rows, cols uint16) error {
 	header := proto.ClientResizeHeader{
+		Type: proto.TypeResize,
 		Cols: cols,
 		Rows: rows,
 	}
