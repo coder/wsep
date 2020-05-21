@@ -6,6 +6,56 @@ encryption.
 It's useful in cases where you want to provide a command exec interface into a remote environment. It's implemented
 with WebSocket so it may be used directly by a browser frontend.
 
+## Examples
+
+### Client
+
+```go
+	conn, _, err := websocket.Dial(ctx, "ws://remote.exec.addr", nil)
+	if err != nil {
+    // handle error
+  }
+	defer conn.Close(websocket.StatusAbnormalClosure, "terminate process")
+
+	executor := wsep.RemoteExecer(conn)
+	process, err := executor.Start(ctx, proto.Command{
+    Command: "cat",
+    Args: []string{"go.mod"},
+	})
+	if err != nil {
+    // handle error
+  }
+
+	go io.Copy(os.Stdout, process.Stdout())
+	go io.Copy(os.Stderr, process.Stderr())
+
+	err = process.Wait()
+	if err != nil {
+    // process failed
+    return
+  }
+  // process succeeded
+  conn.Close(websocket.StatusNormalClosure, "normal closure")
+```
+
+### Server
+
+```go
+func (s Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	ws, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+  }
+  defer ws.Close()
+
+	err = wsep.Serve(r.Context(), ws, wsep.LocalExecer{})
+	if err != nil {
+    // handle error
+	}
+}
+```
+
 ### Performance Goals
 
 Test command
@@ -42,9 +92,11 @@ This must be the first Client message.
 ```json
 {
   "type": "start",
-  "command": "cat",
-  "args": ["/dev/urandom"],
-  "tty": false
+  "command": {
+    "command": "cat",
+    "args": ["/dev/urandom"],
+    "tty": false
+  }
 }
 ```
 
