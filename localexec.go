@@ -69,6 +69,7 @@ func (l *localProcess) Pid() int {
 func (l LocalExecer) Start(ctx context.Context, c proto.Command) (Process, error) {
 	var (
 		process localProcess
+		err     error
 	)
 	process.cmd = exec.Command(c.Command, c.Args...)
 
@@ -90,10 +91,6 @@ func (l LocalExecer) Start(ctx context.Context, c proto.Command) (Process, error
 	if c.UID != 0 {
 		process.cmd.SysProcAttr.Credential.Gid = c.UID
 	}
-
-	var (
-		err error
-	)
 
 	if c.TTY {
 		process.tty, err = pty.Start(process.cmd)

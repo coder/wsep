@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"net"
 
 	"cdr.dev/wsep/internal/proto"
 	"go.coder.com/flog"
@@ -49,7 +50,9 @@ func (r remoteExec) Start(ctx context.Context, c proto.Command) (Process, error)
 		done:   make(chan error),
 		stderr: newPipe(),
 		stdout: newPipe(),
-		stdin:  newPipe(),
+		stdin: remoteStdin{
+			conn: websocket.NetConn(ctx, r.conn, websocket.MessageBinary),
+		},
 	}
 
 	go rp.listen(ctx)
@@ -60,9 +63,38 @@ type remoteProcess struct {
 	conn   *websocket.Conn
 	pid    int
 	done   chan error
-	stdin  pipe
+	stdin  remoteStdin
 	stdout pipe
 	stderr pipe
+}
+
+type remoteStdin struct {
+	conn net.Conn
+}
+
+func (r remoteStdin) Write(b []byte) (int, error) {
+	stdinHeader := proto.Header{
+		Type: proto.TypeStdin,
+	}
+
+	headerByt, err := json.Marshal(stdinHeader)
+	if err != nil {
+		return 0, err
+	}
+	stdinWriter := proto.WithHeader(r.conn, headerByt)
+	return stdinWriter.Write(b)
+}
+
+func (r remoteStdin) Close() error {
+	closeHeader := proto.Header{
+		Type: proto.TypeCloseStdin,
+	}
+	headerByt, err := json.Marshal(closeHeader)
+	if err != nil {
+		return err
+	}
+	_, err = proto.WithHeader(r.conn, headerByt).Write(nil)
+	return err
 }
 
 type pipe struct {
@@ -78,28 +110,10 @@ func newPipe() pipe {
 	}
 }
 
-func (r remoteProcess) pipeStdin(ctx context.Context) {
-	wsNetConn := websocket.NetConn(ctx, r.conn, websocket.MessageBinary)
-	stdinHeader := proto.Header{
-		Type: proto.TypeStdin,
-	}
-
-	headerByt, err := json.Marshal(stdinHeader)
-	if err != nil {
-		flog.Error("failed to marshal stdin header")
-	}
-	stdinWriter := proto.WithHeader(wsNetConn, headerByt)
-
-	io.Copy(stdinWriter, r.stdin.r)
-}
-
 func (r remoteProcess) listen(ctx context.Context) {
 	defer r.conn.Close(websocket.StatusNormalClosure, "normal closure")
 	defer r.stdout.w.Close()
 	defer r.stderr.w.Close()
-	defer r.stdin.r.Close()
-
-	go r.pipeStdin(ctx)
 
 	for {
 		if err := ctx.Err(); err != nil {
@@ -146,7 +160,7 @@ func (r remoteProcess) Pid() int {
 }
 
 func (r remoteProcess) Stdin() io.WriteCloser {
-	return r.stdin.w
+	return r.stdin
 }
 
 func (r remoteProcess) Stdout() io.Reader {

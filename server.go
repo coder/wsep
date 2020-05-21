@@ -7,7 +7,6 @@ import (
 	"errors"
 	"io"
 	"net"
-	"sync"
 
 	"go.coder.com/flog"
 	"golang.org/x/xerrors"
@@ -35,6 +34,9 @@ func Serve(ctx context.Context, c *websocket.Conn, execer Execer) error {
 			return err
 		}
 		_, byt, err := c.Read(ctx)
+		if xerrors.Is(err, io.EOF) {
+			return nil
+		}
 		if err != nil {
 			status := websocket.CloseStatus(err)
 			if status == -1 {
@@ -97,13 +99,9 @@ func Serve(ctx context.Context, c *websocket.Conn, execer Execer) error {
 				return xerrors.Errorf("read stdin: %w", err)
 			}
 		case proto.TypeCloseStdin:
-			wr, err := c.Writer(ctx, websocket.MessageBinary)
+			err = process.Stdin().Close()
 			if err != nil {
-				return xerrors.Errorf("get writer: %w", err)
-			}
-			err = json.NewEncoder(wr).Encode(&proto.Header{Type: "close_stdin"})
-			if err != nil {
-				return xerrors.Errorf("encode close_stdin: %w", err)
+				return xerrors.Errorf("close stdin: %w", err)
 			}
 		default:
 			flog.Error("unrecognized header type: %s", header.Type)
@@ -112,10 +110,13 @@ func Serve(ctx context.Context, c *websocket.Conn, execer Execer) error {
 }
 
 func sendExitCode(ctx context.Context, exitCode int, conn net.Conn) {
-	header, _ := json.Marshal(proto.ServerExitCodeHeader{
+	header, err := json.Marshal(proto.ServerExitCodeHeader{
 		Type:     proto.TypeExitCode,
 		ExitCode: exitCode,
 	})
+	if err != nil {
+		return
+	}
 	proto.WithHeader(conn, header).Write(nil)
 }
 
@@ -128,17 +129,12 @@ func pipeProcessOutput(ctx context.Context, process Process, conn net.Conn) {
 	var (
 		stdout = process.Stdout()
 		stderr = process.Stderr()
-		wg     sync.WaitGroup
 	)
-
-	wg.Add(2)
-	go pipeReaderWithHeader(stdout, conn, proto.Header{Type: proto.TypeStdout}, &wg)
-	go pipeReaderWithHeader(stderr, conn, proto.Header{Type: proto.TypeStderr}, &wg)
-	wg.Wait()
+	go pipeReaderWithHeader(stdout, conn, proto.Header{Type: proto.TypeStdout})
+	go pipeReaderWithHeader(stderr, conn, proto.Header{Type: proto.TypeStderr})
 }
 
-func pipeReaderWithHeader(r io.Reader, w io.WriteCloser, header proto.Header, wg *sync.WaitGroup) {
-	defer wg.Done()
+func pipeReaderWithHeader(r io.Reader, w io.WriteCloser, header proto.Header) {
 	headerByt, err := json.Marshal(header)
 	if err != nil {
 		return
