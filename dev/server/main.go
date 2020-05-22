@@ -11,15 +11,13 @@ import (
 func main() {
 	server := http.Server{
 		Addr:    ":8080",
-		Handler: server{},
+		Handler: http.HandlerFunc(serve),
 	}
 	err := server.ListenAndServe()
 	flog.Fatal("failed to listen: %v", err)
 }
 
-type server struct{}
-
-func (s server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func serve(w http.ResponseWriter, r *http.Request) {
 	ws, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -27,6 +25,9 @@ func (s server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	err = wsep.Serve(r.Context(), ws, wsep.LocalExecer{})
 	if err != nil {
-		flog.Fatal("failed to serve local execer: %v", err)
+		flog.Error("failed to serve execer: %v", err)
+		ws.Close(websocket.StatusAbnormalClosure, "failed to serve execer")
+		return
 	}
+	ws.Close(websocket.StatusNormalClosure, "normal closure")
 }
