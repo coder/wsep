@@ -84,7 +84,7 @@ func (l LocalExecer) Start(ctx context.Context, c Command) (Process, error) {
 		process.cmd.SysProcAttr.Credential.Gid = c.GID
 	}
 	if c.UID != 0 {
-		process.cmd.SysProcAttr.Credential.Gid = c.UID
+		process.cmd.SysProcAttr.Credential.Uid = c.UID
 	}
 
 	if c.TTY {

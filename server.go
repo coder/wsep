@@ -133,11 +133,11 @@ func pipeProcessOutput(ctx context.Context, process Process, conn net.Conn) {
 		stdout = process.Stdout()
 		stderr = process.Stderr()
 	)
-	go pipeReaderWithHeader(stdout, conn, proto.Header{Type: proto.TypeStdout})
-	go pipeReaderWithHeader(stderr, conn, proto.Header{Type: proto.TypeStderr})
+	go copyWithHeader(stdout, conn, proto.Header{Type: proto.TypeStdout})
+	go copyWithHeader(stderr, conn, proto.Header{Type: proto.TypeStderr})
 }
 
-func pipeReaderWithHeader(r io.Reader, w io.WriteCloser, header proto.Header) {
+func copyWithHeader(r io.Reader, w io.Writer, header proto.Header) {
 	headerByt, err := json.Marshal(header)
 	if err != nil {
 		return
