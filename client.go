@@ -21,6 +21,7 @@ func RemoteExecer(conn *websocket.Conn) Execer {
 	return remoteExec{conn: conn}
 }
 
+// Command represents an external command to be run
 type Command struct {
 	Command    string
 	Args       []string

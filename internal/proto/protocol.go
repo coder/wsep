@@ -28,12 +28,12 @@ func SplitMessage(b []byte) (header []byte, body []byte) {
 }
 
 type headerWriter struct {
-	w      io.WriteCloser
+	w      io.Writer
 	header []byte
 }
 
 // WithHeader adds the given header to all writes
-func WithHeader(w io.WriteCloser, header []byte) io.WriteCloser {
+func WithHeader(w io.Writer, header []byte) io.Writer {
 	return headerWriter{
 		header: header,
 		w:      w,
@@ -47,8 +47,4 @@ func (h headerWriter) Write(b []byte) (int, error) {
 		return 0, err
 	}
 	return len(b), nil // TODO: potential buggy
-}
-
-func (h headerWriter) Close() error {
-	return h.w.Close()
 }

@@ -1,5 +1,6 @@
 package proto
 
+// Client message header type
 const (
 	TypeStart      = "start"
 	TypeResize     = "resize_header"
@@ -7,12 +8,14 @@ const (
 	TypeCloseStdin = "close_stdin"
 )
 
+// ClientResizeHeader specifies a terminal window resize request
 type ClientResizeHeader struct {
 	Type string `json:"type"`
 	Rows uint16 `json:"rows"`
 	Cols uint16 `json:"cols"`
 }
 
+// ClientStartHeader specifies a request to start command
 type ClientStartHeader struct {
 	Type    string  `json:"type"`
 	Command Command `json:"command"`

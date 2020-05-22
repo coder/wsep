@@ -65,6 +65,7 @@ func (l *localProcess) Pid() int {
 	return l.cmd.Process.Pid
 }
 
+// Start executes the given command locally
 func (l LocalExecer) Start(ctx context.Context, c Command) (Process, error) {
 	var (
 		process localProcess
