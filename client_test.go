@@ -51,7 +51,7 @@ func TestRemoteStdin(t *testing.T) {
 	}
 }
 
-func TestExec(t *testing.T) {
+func TestRemoteExec(t *testing.T) {
 	mockServerHandler := func(w http.ResponseWriter, r *http.Request) {
 		ws, err := websocket.Accept(w, r, nil)
 		if err != nil {
@@ -100,13 +100,14 @@ func TestExec(t *testing.T) {
 	go func() {
 		wg.Add(1)
 		defer wg.Done()
+
 		stderr, err := ioutil.ReadAll(process.Stderr())
 		assert.Success(t, "read stderr", err)
 		assert.Equal(t, "len stderr", 0, len(stderr))
 	}()
 
 	err = process.Wait()
-	assert.Success(t, "wait", err)
+	assert.Success(t, "wait for process to complete", err)
 
 	wg.Wait()
 }
