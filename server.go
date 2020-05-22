@@ -61,7 +61,7 @@ func Serve(ctx context.Context, c *websocket.Conn, execer Execer) error {
 			if err != nil {
 				return xerrors.Errorf("unmarshal start header: %w", err)
 			}
-			process, err = execer.Start(ctx, header.Command)
+			process, err = execer.Start(ctx, mapToClientCmd(header.Command))
 			if err != nil {
 				return err
 			}

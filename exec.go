@@ -34,5 +34,30 @@ type Process interface {
 
 // Execer starts commands.
 type Execer interface {
-	Start(ctx context.Context, c proto.Command) (Process, error)
+	Start(ctx context.Context, c Command) (Process, error)
+}
+
+// theses maps are needed to prevent an import cycle
+func mapToProtoCmd(c Command) proto.Command {
+	return proto.Command{
+		Command:    c.Command,
+		Args:       c.Args,
+		TTY:        c.TTY,
+		UID:        c.UID,
+		GID:        c.GID,
+		Env:        c.Env,
+		WorkingDir: c.WorkingDir,
+	}
+}
+
+func mapToClientCmd(c proto.Command) Command {
+	return Command{
+		Command:    c.Command,
+		Args:       c.Args,
+		TTY:        c.TTY,
+		UID:        c.UID,
+		GID:        c.GID,
+		Env:        c.Env,
+		WorkingDir: c.WorkingDir,
+	}
 }

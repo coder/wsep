@@ -6,7 +6,6 @@ import (
 	"os"
 
 	"cdr.dev/wsep"
-	"cdr.dev/wsep/internal/proto"
 	"github.com/spf13/pflag"
 	"go.coder.com/cli"
 	"go.coder.com/flog"
@@ -64,7 +63,7 @@ func do(fl *pflag.FlagSet, tty bool) {
 	if len(fl.Args()) > 1 {
 		args = fl.Args()[1:]
 	}
-	process, err := executor.Start(ctx, proto.Command{
+	process, err := executor.Start(ctx, wsep.Command{
 		Command: fl.Arg(0),
 		Args:    args,
 		TTY:     tty,

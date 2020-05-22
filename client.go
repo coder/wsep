@@ -21,9 +21,19 @@ func RemoteExecer(conn *websocket.Conn) Execer {
 	return remoteExec{conn: conn}
 }
 
-func (r remoteExec) Start(ctx context.Context, c proto.Command) (Process, error) {
+type Command struct {
+	Command    string
+	Args       []string
+	TTY        bool
+	UID        uint32
+	GID        uint32
+	Env        []string
+	WorkingDir string
+}
+
+func (r remoteExec) Start(ctx context.Context, c Command) (Process, error) {
 	header := proto.ClientStartHeader{
-		Command: c,
+		Command: mapToProtoCmd(c),
 		Type:    proto.TypeStart,
 	}
 	payload, err := json.Marshal(header)
