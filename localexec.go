@@ -1,8 +1,10 @@
 package wsep
 
 import (
+	"bytes"
 	"context"
 	"io"
+	"io/ioutil"
 	"os"
 	"os/exec"
 	"syscall"
@@ -93,7 +95,7 @@ func (l LocalExecer) Start(ctx context.Context, c Command) (Process, error) {
 			return nil, xerrors.Errorf("start command with pty: %w", err)
 		}
 		process.stdout = process.tty
-		process.stderr = process.tty
+		process.stderr = ioutil.NopCloser(bytes.NewReader(nil))
 		process.stdin = process.tty
 	} else {
 		process.stdin, err = process.cmd.StdinPipe()

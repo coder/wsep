@@ -8,16 +8,13 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
 	"cdr.dev/slog/sloggers/slogtest/assert"
 	"cdr.dev/wsep/internal/proto"
 	"github.com/google/go-cmp/cmp"
-	"go.coder.com/flog"
 	"nhooyr.io/websocket"
 )
 
@@ -51,7 +48,7 @@ func TestRemoteStdin(t *testing.T) {
 	}
 }
 
-func TestRemoteExec(t *testing.T) {
+func mockConn(ctx context.Context, t *testing.T) (*websocket.Conn, *httptest.Server) {
 	mockServerHandler := func(w http.ResponseWriter, r *http.Request) {
 		ws, err := websocket.Accept(w, r, nil)
 		if err != nil {
@@ -60,54 +57,28 @@ func TestRemoteExec(t *testing.T) {
 		}
 		err = Serve(r.Context(), ws, LocalExecer{})
 		if err != nil {
-			flog.Error("failed to serve execer: %v", err)
+			t.Errorf("failed to serve execer: %v", err)
 			ws.Close(websocket.StatusAbnormalClosure, "failed to serve execer")
 			return
 		}
 		ws.Close(websocket.StatusNormalClosure, "normal closure")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-
 	server := httptest.NewServer(http.HandlerFunc(mockServerHandler))
-	defer server.Close()
 
 	ws, _, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(server.URL, "http"), nil)
 	assert.Success(t, "dial websocket server", err)
+	return ws, server
+}
+
+func TestRemoteExec(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	ws, server := mockConn(ctx, t)
 	defer ws.Close(websocket.StatusAbnormalClosure, "abnormal closure")
+	defer server.Close()
 
 	execer := RemoteExecer(ws)
-	process, err := execer.Start(ctx, Command{
-		Command: "pwd",
-	})
-	assert.Success(t, "start process", err)
-
-	assert.Equal(t, "pid", false, process.Pid() == 0)
-
-	var wg sync.WaitGroup
-	go func() {
-		wg.Add(1)
-		defer wg.Done()
-
-		stdout, err := ioutil.ReadAll(process.Stdout())
-		assert.Success(t, "read stdout", err)
-		wd, err := os.Getwd()
-		assert.Success(t, "get real working dir", err)
-
-		assert.Equal(t, "stdout", wd, strings.TrimSuffix(string(stdout), "\n"))
-	}()
-	go func() {
-		wg.Add(1)
-		defer wg.Done()
-
-		stderr, err := ioutil.ReadAll(process.Stderr())
-		assert.Success(t, "read stderr", err)
-		assert.Equal(t, "len stderr", 0, len(stderr))
-	}()
-
-	err = process.Wait()
-	assert.Success(t, "wait for process to complete", err)
-
-	wg.Wait()
+	testExecer(ctx, t, execer)
 }

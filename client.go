@@ -200,5 +200,21 @@ func (r remoteProcess) Wait() error {
 }
 
 func (r remoteProcess) Close() error {
-	return r.conn.Close(websocket.StatusAbnormalClosure, "kill process")
+	err := r.conn.Close(websocket.StatusNormalClosure, "")
+	err1 := r.stderr.w.Close()
+	err2 := r.stdout.w.Close()
+	return joinErrs(err, err1, err2)
+}
+
+func joinErrs(errs ...error) error {
+	var str string
+	for _, e := range errs {
+		if e != nil {
+			if str != "" {
+				str += ", "
+			}
+			str += e.Error()
+		}
+	}
+	return xerrors.New(str)
 }

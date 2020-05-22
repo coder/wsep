@@ -16,7 +16,10 @@ func TestLocalExec(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	execer := LocalExecer{}
+	testExecer(ctx, t, LocalExecer{})
+}
+
+func testExecer(ctx context.Context, t *testing.T, execer Execer) {
 	process, err := execer.Start(ctx, Command{
 		Command: "pwd",
 	})

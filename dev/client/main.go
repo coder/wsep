@@ -78,8 +78,6 @@ func do(fl *pflag.FlagSet, tty bool) {
 	err = process.Wait()
 	if err != nil {
 		flog.Error("process failed: %v", err)
-	} else {
-		flog.Info("process finished successfully")
 	}
 	conn.Close(websocket.StatusNormalClosure, "normal closure")
 }
