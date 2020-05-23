@@ -49,7 +49,7 @@ func testTTY(ctx context.Context, t *testing.T, e Execer) {
 		t.Logf("bash tty stderr = %s", stderr)
 		assert.True(t, "stderr is empty", len(stderr) == 0)
 	}()
-	time.Sleep(5 * time.Second)
+	time.Sleep(3 * time.Second)
 
 	process.Close()
 	wg.Wait()

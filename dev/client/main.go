@@ -4,11 +4,14 @@ import (
 	"context"
 	"io"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"cdr.dev/wsep"
 	"github.com/spf13/pflag"
 	"go.coder.com/cli"
 	"go.coder.com/flog"
+	"golang.org/x/crypto/ssh/terminal"
 	"nhooyr.io/websocket"
 )
 
@@ -71,6 +74,27 @@ func do(fl *pflag.FlagSet, tty bool) {
 	if err != nil {
 		flog.Fatal("failed to start remote command: %v", err)
 	}
+	if tty {
+		ch := make(chan os.Signal, 1)
+		signal.Notify(ch, syscall.SIGWINCH)
+		go func() {
+			for range ch {
+				width, height, err := terminal.GetSize(int(os.Stdin.Fd()))
+				if err != nil {
+					continue
+				}
+				process.Resize(ctx, uint16(height), uint16(width))
+			}
+		}()
+		ch <- syscall.SIGWINCH
+
+		oldState, err := terminal.MakeRaw(int(os.Stdin.Fd()))
+		if err != nil {
+			flog.Fatal("failed to make terminal raw for tty: %w", err)
+		}
+		defer terminal.Restore(int(os.Stdin.Fd()), oldState)
+	}
+
 	go io.Copy(os.Stdout, process.Stdout())
 	go io.Copy(os.Stderr, process.Stderr())
 	go io.Copy(process.Stdin(), os.Stdin)
