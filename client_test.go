@@ -43,8 +43,8 @@ func TestRemoteStdin(t *testing.T) {
 
 		header, body := proto.SplitMessage(msg)
 
-		assert.Equal(t, "stdin body", body, []byte(tcase), bytecmp)
-		assert.Equal(t, "stdin header", header, []byte(`{"type":"stdin"}`), bytecmp)
+		assert.Equal(t, "stdin body", []byte(tcase), body, bytecmp)
+		assert.Equal(t, "stdin header", []byte(`{"type":"stdin"}`), header, bytecmp)
 	}
 }
 

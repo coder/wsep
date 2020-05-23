@@ -43,7 +43,7 @@ func testExecer(ctx context.Context, t *testing.T, execer Execer) {
 
 		stderr, err := ioutil.ReadAll(process.Stderr())
 		assert.Success(t, "read stderr", err)
-		assert.Equal(t, "len stderr", 0, len(stderr))
+		assert.True(t, "len stderr", len(stderr) == 0)
 	}()
 
 	err = process.Wait()

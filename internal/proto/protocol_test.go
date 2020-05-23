@@ -37,7 +37,7 @@ func TestWithHeader(t *testing.T) {
 		assert.Success(t, "read buffer", err)
 
 		header, body := SplitMessage(msg)
-		assert.Equal(t, "header is expected value", header, tcase.header, bytecmp)
-		assert.Equal(t, "body is expected value", body, tcase.body, bytecmp)
+		assert.Equal(t, "header is expected value", tcase.header, header, bytecmp)
+		assert.Equal(t, "body is expected value", tcase.body, body, bytecmp)
 	}
 }

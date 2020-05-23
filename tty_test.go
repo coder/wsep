@@ -37,8 +37,11 @@ func testTTY(ctx context.Context, t *testing.T, e Execer) {
 
 		stdout, err := ioutil.ReadAll(process.Stdout())
 		assert.Success(t, "read stdout", err)
+
 		t.Logf("bash tty stdout = %s", stdout)
-		assert.True(t, `bash "$" prompt found`, strings.HasSuffix(string(stdout), "$ "))
+		prompt := string(stdout)
+		assert.True(t, `bash "$" prompt found`,
+			strings.HasSuffix(prompt, "$ ") || strings.HasSuffix(prompt, "# "))
 	}()
 	go func() {
 		wg.Add(1)
