@@ -31,8 +31,8 @@ func testTTY(ctx context.Context, t *testing.T, e Execer) {
 	})
 	assert.Success(t, "start bash", err)
 	var wg sync.WaitGroup
+	wg.Add(1)
 	go func() {
-		wg.Add(1)
 		defer wg.Done()
 
 		stdout, err := ioutil.ReadAll(process.Stdout())
@@ -40,11 +40,11 @@ func testTTY(ctx context.Context, t *testing.T, e Execer) {
 
 		t.Logf("bash tty stdout = %s", stdout)
 		prompt := string(stdout)
-		assert.True(t, `bash "$" prompt found`,
+		assert.True(t, `bash "$" or "#" prompt found`,
 			strings.HasSuffix(prompt, "$ ") || strings.HasSuffix(prompt, "# "))
 	}()
+	wg.Add(1)
 	go func() {
-		wg.Add(1)
 		defer wg.Done()
 
 		stderr, err := ioutil.ReadAll(process.Stderr())

@@ -26,8 +26,8 @@ func testExecer(ctx context.Context, t *testing.T, execer Execer) {
 	assert.Success(t, "start local cmd", err)
 
 	var wg sync.WaitGroup
+	wg.Add(1)
 	go func() {
-		wg.Add(1)
 		defer wg.Done()
 
 		stdout, err := ioutil.ReadAll(process.Stdout())
@@ -37,8 +37,8 @@ func testExecer(ctx context.Context, t *testing.T, execer Execer) {
 
 		assert.Equal(t, "stdout", wd, strings.TrimSuffix(string(stdout), "\n"))
 	}()
+	wg.Add(1)
 	go func() {
-		wg.Add(1)
 		defer wg.Done()
 
 		stderr, err := ioutil.ReadAll(process.Stderr())
