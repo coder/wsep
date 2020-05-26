@@ -46,5 +46,5 @@ func (h headerWriter) Write(b []byte) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	return len(b), nil // TODO: potential buggy
+	return len(b), nil
 }

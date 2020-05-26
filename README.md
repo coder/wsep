@@ -1,6 +1,7 @@
 # wsep
 
-`wsep` is a high performance, ***W***eb***S***ocket command ***e***xecution ***p***rotocol. It can be thought of as SSH without encryption.
+`wsep` is a high performance,
+<strong style="font-size: 1.5em; text-decoration: underline;">w</strong>eb <strong style="font-size: 1.5em;text-decoration: underline;">s</strong>ocket command <strong style="font-size: 1.5em;text-decoration: underline;">e</strong>xecution <strong style="font-size: 1.5em;text-decoration: underline;">p</strong>rotocol. It can be thought of as SSH without encryption.
 
 It's useful in cases where you want to provide a command exec interface into a remote environment. It's implemented
 with WebSocket so it may be used directly by a browser frontend.
@@ -25,9 +26,7 @@ if err != nil {
   // handle error
 }
 
-go io.Copy(os.Stdout, process.Stdout())
-go io.Copy(os.Stderr, process.Stderr())
-go io.Copy(process.Stdin(), os.Stdin)
+io.Copy(os.Stderr, process.Stderr())
 
 err = process.Wait()
 if err != nil {

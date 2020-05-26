@@ -76,7 +76,6 @@ func TestRemoteExec(t *testing.T) {
 	defer cancel()
 
 	ws, server := mockConn(ctx, t)
-	defer ws.Close(websocket.StatusAbnormalClosure, "abnormal closure")
 	defer server.Close()
 
 	execer := RemoteExecer(ws)

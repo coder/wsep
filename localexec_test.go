@@ -24,30 +24,33 @@ func testExecer(ctx context.Context, t *testing.T, execer Execer) {
 		Command: "pwd",
 	})
 	assert.Success(t, "start local cmd", err)
+	var (
+		stderr = process.Stderr()
+		stdout = process.Stdout()
+		wg     sync.WaitGroup
+	)
 
-	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 
-		stdout, err := ioutil.ReadAll(process.Stdout())
+		stdoutByt, err := ioutil.ReadAll(stdout)
 		assert.Success(t, "read stdout", err)
 		wd, err := os.Getwd()
 		assert.Success(t, "get real working dir", err)
 
-		assert.Equal(t, "stdout", wd, strings.TrimSuffix(string(stdout), "\n"))
+		assert.Equal(t, "stdout", wd, strings.TrimSuffix(string(stdoutByt), "\n"))
 	}()
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 
-		stderr, err := ioutil.ReadAll(process.Stderr())
+		stderrByt, err := ioutil.ReadAll(stderr)
 		assert.Success(t, "read stderr", err)
-		assert.True(t, "len stderr", len(stderr) == 0)
+		assert.True(t, "len stderr", len(stderrByt) == 0)
 	}()
 
+	wg.Wait()
 	err = process.Wait()
 	assert.Success(t, "wait for process to complete", err)
-
-	wg.Wait()
 }
