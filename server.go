@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"sync"
 
 	"go.coder.com/flog"
 	"golang.org/x/xerrors"
@@ -67,11 +68,13 @@ func Serve(ctx context.Context, c *websocket.Conn, execer Execer) error {
 			}
 
 			sendPID(ctx, process.Pid(), wsNetConn)
-			go pipeProcessOutput(ctx, process, wsNetConn)
+			var wg sync.WaitGroup
+			go pipeProcessOutput(ctx, process, wsNetConn, &wg)
 
 			go func() {
 				defer wsNetConn.Close()
 				err = process.Wait()
+				wg.Wait()
 				if exitErr, ok := err.(*ExitError); ok {
 					sendExitCode(ctx, exitErr.Code, wsNetConn)
 					return
@@ -128,16 +131,18 @@ func sendPID(ctx context.Context, pid int, conn net.Conn) {
 	proto.WithHeader(conn, header).Write(nil)
 }
 
-func pipeProcessOutput(ctx context.Context, process Process, conn net.Conn) {
+func pipeProcessOutput(ctx context.Context, process Process, conn net.Conn, wg *sync.WaitGroup) {
 	var (
 		stdout = process.Stdout()
 		stderr = process.Stderr()
 	)
-	go copyWithHeader(stdout, conn, proto.Header{Type: proto.TypeStdout})
-	go copyWithHeader(stderr, conn, proto.Header{Type: proto.TypeStderr})
+	wg.Add(2)
+	go copyWithHeader(stdout, conn, proto.Header{Type: proto.TypeStdout}, wg)
+	go copyWithHeader(stderr, conn, proto.Header{Type: proto.TypeStderr}, wg)
 }
 
-func copyWithHeader(r io.Reader, w io.Writer, header proto.Header) {
+func copyWithHeader(r io.Reader, w io.Writer, header proto.Header, wg *sync.WaitGroup) {
+	defer wg.Done()
 	headerByt, err := json.Marshal(header)
 	if err != nil {
 		return

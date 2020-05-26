@@ -1,13 +1,14 @@
 package wsep
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
 	"net"
 
 	"cdr.dev/wsep/internal/proto"
-	"go.coder.com/flog"
+	"golang.org/x/sync/errgroup"
 	"golang.org/x/xerrors"
 	"nhooyr.io/websocket"
 )
@@ -123,46 +124,67 @@ func newPipe() pipe {
 
 func (r remoteProcess) listen(ctx context.Context) {
 	defer r.conn.Close(websocket.StatusNormalClosure, "normal closure")
-	defer r.stdout.w.Close()
-	defer r.stderr.w.Close()
 
-	for {
-		if err := ctx.Err(); err != nil {
-			r.done <- xerrors.Errorf("process canceled: %w", err)
-			break
-		}
-		_, payload, err := r.conn.Read(ctx)
-		if err != nil {
-			continue
-		}
-		headerByt, body := proto.SplitMessage(payload)
+	exitCode := make(chan int, 1)
+	var eg errgroup.Group
 
-		var header proto.Header
-		err = json.Unmarshal(headerByt, &header)
-		if err != nil {
-			continue
-		}
+	eg.Go(func() error {
+		defer r.stdout.w.Close()
+		defer r.stderr.w.Close()
 
-		switch header.Type {
-		case proto.TypeStderr:
-			go r.stderr.w.Write(body)
-		case proto.TypeStdout:
-			go r.stdout.w.Write(body)
-		case proto.TypeExitCode:
-			var exitMsg proto.ServerExitCodeHeader
-			err = json.Unmarshal(headerByt, &exitMsg)
+		buf := make([]byte, 32<<10) // max size of one websocket message
+		for {
+			if err := ctx.Err(); err != nil {
+				r.done <- xerrors.Errorf("process canceled: %w", err)
+				break
+			}
+			_, payload, err := r.conn.Read(ctx)
 			if err != nil {
-				flog.Error("failed to unmarshal exit code message: %v", err)
+				continue
+			}
+			headerByt, body := proto.SplitMessage(payload)
+
+			var header proto.Header
+			err = json.Unmarshal(headerByt, &header)
+			if err != nil {
 				continue
 			}
 
-			var err error = ExitError{Code: exitMsg.ExitCode}
-			if exitMsg.ExitCode == 0 {
-				err = nil
+			switch header.Type {
+			case proto.TypeStderr:
+				_, err = io.CopyBuffer(r.stderr.w, bytes.NewReader(body), buf)
+				if err != nil {
+					return err
+				}
+			case proto.TypeStdout:
+				_, err = io.CopyBuffer(r.stdout.w, bytes.NewReader(body), buf)
+				if err != nil {
+					return err
+				}
+			case proto.TypeExitCode:
+				var exitMsg proto.ServerExitCodeHeader
+				err = json.Unmarshal(headerByt, &exitMsg)
+				if err != nil {
+					continue
+				}
+
+				exitCode <- exitMsg.ExitCode
+				return nil
 			}
-			r.done <- err
+		}
+		return nil
+	})
+
+	err := eg.Wait()
+	select {
+	case exitCode := <-exitCode:
+		if exitCode != 0 {
+			r.done <- ExitError{Code: int(exitCode)}
 			return
 		}
+		r.done <- nil
+	default:
+		r.done <- err
 	}
 }
 
