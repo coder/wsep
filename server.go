@@ -79,11 +79,7 @@ func Serve(ctx context.Context, c *websocket.Conn, execer Execer) error {
 
 			go func() {
 				defer wsNetConn.Close()
-				err := outputgroup.Wait()
-				if err != nil {
-					// connection should close without an exit code if copy fails
-					return
-				}
+				_ = outputgroup.Wait()
 				err = process.Wait()
 				if exitErr, ok := err.(*ExitError); ok {
 					sendExitCode(ctx, exitErr.Code, wsNetConn)
