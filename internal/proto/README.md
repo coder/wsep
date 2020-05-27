@@ -79,7 +79,7 @@ and a body follows after a newline character.
 This is the last message sent by the server.
 
 ```json
-{ "type": "exit_code", "code": 255 }
+{ "type": "exit_code", "exit_code": 255 }
 ```
 
 A normal closure follows.
