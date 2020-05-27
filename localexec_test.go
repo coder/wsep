@@ -54,3 +54,19 @@ func testExecer(ctx context.Context, t *testing.T, execer Execer) {
 	err = process.Wait()
 	assert.Success(t, "wait for process to complete", err)
 }
+
+func TestExitCode(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	process, err := LocalExecer{}.Start(ctx, Command{
+		Command: "/bin/sh",
+		Args:    []string{"-c", `"fakecommand"`},
+	})
+	assert.Success(t, "start local cmd", err)
+
+	err = process.Wait()
+	exitErr, ok := err.(*ExitError)
+	assert.True(t, "error is *ExitError", ok)
+	assert.Equal(t, "exit error", exitErr.Code, 127)
+}
