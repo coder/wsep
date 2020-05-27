@@ -70,6 +70,26 @@ go run ./dev/client tty bash
 go run ./dev/client notty ls
 ```
 
+### Local performance cost
+
+Local `sh` through a local `wsep` connection
+
+```shellscript
+$ head -c 100000000 /dev/urandom > /tmp/random; cat /tmp/random | pv | time ./bin/client notty sh -c "cat > /dev/null"
+
+95.4MiB 0:00:00 [ 269MiB/s] [ <=>                                                                                  ]
+./bin/client notty sh -c "cat > /dev/null"  0.32s user 0.31s system 31% cpu 2.019 total
+```
+
+Local `sh` directly
+
+```shell script
+$ head -c 100000000 /dev/urandom > /tmp/random; cat /tmp/random | pv | time  sh -c "cat > /dev/null"
+
+95.4MiB 0:00:00 [1.73GiB/s] [ <=>                                                                                  ]
+sh -c "cat > /dev/null"  0.00s user 0.02s system 32% cpu 0.057 total
+```
+
 ### Performance Goals
 
 Test command

@@ -20,6 +20,7 @@ import (
 // The execer may be another wsep connection for chaining.
 // Use LocalExecer for local command execution.
 func Serve(ctx context.Context, c *websocket.Conn, execer Execer) error {
+	c.SetReadLimit(maxMessageSize)
 	var (
 		header    proto.Header
 		process   Process

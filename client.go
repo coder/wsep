@@ -13,12 +13,15 @@ import (
 	"nhooyr.io/websocket"
 )
 
+const maxMessageSize = 64000
+
 type remoteExec struct {
 	conn *websocket.Conn
 }
 
 // RemoteExecer creates an execution interface from a WebSocket connection.
 func RemoteExecer(conn *websocket.Conn) Execer {
+	conn.SetReadLimit(maxMessageSize)
 	return remoteExec{conn: conn}
 }
 
@@ -94,7 +97,21 @@ func (r remoteStdin) Write(b []byte) (int, error) {
 		return 0, err
 	}
 	stdinWriter := proto.WithHeader(r.conn, headerByt)
-	return stdinWriter.Write(b)
+
+	maxBodySize := maxMessageSize - len(headerByt) - 1
+	var nn int
+	for len(b) > maxMessageSize {
+		n, err := stdinWriter.Write(b[:maxBodySize])
+		nn += n
+		if err != nil {
+			return nn, err
+		}
+		b = b[maxBodySize:]
+	}
+
+	n, err := stdinWriter.Write(b)
+	nn += n
+	return nn, err
 }
 
 func (r remoteStdin) Close() error {
