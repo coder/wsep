@@ -97,7 +97,11 @@ func do(fl *pflag.FlagSet, tty bool) {
 
 	go io.Copy(os.Stdout, process.Stdout())
 	go io.Copy(os.Stderr, process.Stderr())
-	go io.Copy(process.Stdin(), os.Stdin)
+	go func() {
+		stdin := process.Stdin()
+		defer stdin.Close()
+		io.Copy(stdin, os.Stdin)
+	}()
 
 	err = process.Wait()
 	if err != nil {
