@@ -27,21 +27,22 @@ export type ServerHeader =
 
 export type Header = ClientHeader | ServerHeader;
 
+export const setBinaryType = (ws: WebSocket) => {
+  ws.binaryType = 'arraybuffer';
+};
+
 export const sendStdin = (ws: WebSocket, data: Uint8Array) => {
   if (data.byteLength < 1) return;
-  ws.binaryType = 'arraybuffer';
   const msg = joinMessage({ type: 'stdin' }, data);
   ws.send(msg.buffer);
 };
 
 export const closeStdin = (ws: WebSocket) => {
-  ws.binaryType = 'arraybuffer';
   const msg = joinMessage({ type: 'close_stdin' });
   ws.send(msg.buffer);
 };
 
 export const startCommand = (ws: WebSocket, command: Command) => {
-  ws.binaryType = 'arraybuffer';
   const msg = joinMessage({ type: 'start', command: command });
   ws.send(msg.buffer);
 };
@@ -58,7 +59,6 @@ export const resizeTerminal = (
   rows: number,
   cols: number
 ): void => {
-  ws.binaryType = 'arraybuffer';
   const msg = joinMessage({ type: 'resize', cols, rows });
   ws.send(msg.buffer);
 };
