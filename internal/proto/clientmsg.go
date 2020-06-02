@@ -3,7 +3,7 @@ package proto
 // Client message header type
 const (
 	TypeStart      = "start"
-	TypeResize     = "resize_header"
+	TypeResize     = "resize"
 	TypeStdin      = "stdin"
 	TypeCloseStdin = "close_stdin"
 )
