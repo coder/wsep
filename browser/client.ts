@@ -1,4 +1,4 @@
-// "wsep" reference browser client implementation
+// "wsep" browser client reference implementation
 
 const DELIMITER = '\n'.charCodeAt(0);
 
@@ -87,14 +87,13 @@ const splitMessage = (message: ArrayBuffer): [Header, Uint8Array] => {
     if (array[i] === DELIMITER) {
       const headerText = new TextDecoder().decode(array.slice(0, i));
       const header: ServerHeader = JSON.parse(headerText);
-      return [
-        header,
+      const body =
         array.length > i + 1
           ? array.slice(i + 1, array.length)
-          : new Uint8Array(0),
-      ];
+          : new Uint8Array(0);
+      return [header, body];
     }
   }
 
-  return [JSON.parse(array.toString()), new Uint8Array(0)];
+  return [JSON.parse(new TextDecoder().decode(array)), new Uint8Array(0)];
 };
