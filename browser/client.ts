@@ -17,7 +17,7 @@ export type ClientHeader =
   | { type: 'start'; command: Command }
   | { type: 'stdin' }
   | { type: 'close_stdin' }
-  | { type: 'resize_header'; cols: number; rows: number };
+  | { type: 'resize'; cols: number; rows: number };
 
 export type ServerHeader =
   | { type: 'stdout' }
@@ -59,7 +59,7 @@ export const resizeTerminal = (
   cols: number
 ): void => {
   ws.binaryType = 'arraybuffer';
-  const msg = joinMessage({ type: 'resize_header', cols, rows });
+  const msg = joinMessage({ type: 'resize', cols, rows });
   ws.send(msg.buffer);
 };
 
