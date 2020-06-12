@@ -60,6 +60,7 @@ func (r remoteExec) Start(ctx context.Context, c Command) (Process, error) {
 		return nil, xerrors.Errorf("failed to parse pid message: %w", err)
 	}
 	rp := remoteProcess{
+		ctx:    ctx,
 		conn:   r.conn,
 		pid:    pidHeader.Pid,
 		done:   make(chan error),
@@ -75,6 +76,7 @@ func (r remoteExec) Start(ctx context.Context, c Command) (Process, error) {
 }
 
 type remoteProcess struct {
+	ctx    context.Context
 	conn   *websocket.Conn
 	pid    int
 	done   chan error
@@ -235,7 +237,12 @@ func (r remoteProcess) Resize(ctx context.Context, rows, cols uint16) error {
 }
 
 func (r remoteProcess) Wait() error {
-	return <-r.done
+	select {
+	case err := <-r.done:
+		return err
+	case <-r.ctx.Done():
+		return r.ctx.Err()
+	}
 }
 
 func (r remoteProcess) Close() error {

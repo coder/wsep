@@ -73,7 +73,7 @@ func (l LocalExecer) Start(ctx context.Context, c Command) (Process, error) {
 		process localProcess
 		err     error
 	)
-	process.cmd = exec.Command(c.Command, c.Args...)
+	process.cmd = exec.CommandContext(ctx, c.Command, c.Args...)
 	process.cmd.Env = c.Env
 	process.cmd.Dir = c.WorkingDir
 
