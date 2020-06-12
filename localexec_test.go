@@ -2,6 +2,7 @@ package wsep
 
 import (
 	"context"
+	"io"
 	"io/ioutil"
 	"os"
 	"strings"
@@ -69,4 +70,50 @@ func TestExitCode(t *testing.T) {
 	exitErr, ok := err.(*ExitError)
 	assert.True(t, "error is *ExitError", ok)
 	assert.Equal(t, "exit error", exitErr.Code, 127)
+}
+
+func TestStdin(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var execer LocalExecer
+	process, err := execer.Start(ctx, Command{
+		Command: "cat",
+		Stdin:   true,
+	})
+	assert.Success(t, "start command", err)
+
+	go func() {
+		stdin := process.Stdin()
+		defer stdin.Close()
+		_, err := io.Copy(stdin, strings.NewReader("testing value"))
+		assert.Success(t, "copy stdin", err)
+	}()
+
+	io.Copy(os.Stdout, process.Stdout())
+	err = process.Wait()
+	assert.Success(t, "process wait", err)
+}
+
+func TestStdinFail(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var execer LocalExecer
+	process, err := execer.Start(ctx, Command{
+		Command: "cat",
+		Stdin:   false,
+	})
+	assert.Success(t, "start command", err)
+
+	go func() {
+		stdin := process.Stdin()
+		defer stdin.Close()
+		_, err := io.Copy(stdin, strings.NewReader("testing value"))
+		assert.Error(t, "copy stdin should fail", err)
+	}()
+
+	io.Copy(os.Stdout, process.Stdout())
+	err = process.Wait()
+	assert.Success(t, "process wait", err)
 }

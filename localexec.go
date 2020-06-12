@@ -98,9 +98,13 @@ func (l LocalExecer) Start(ctx context.Context, c Command) (Process, error) {
 		process.stderr = ioutil.NopCloser(bytes.NewReader(nil))
 		process.stdin = process.tty
 	} else {
-		process.stdin, err = process.cmd.StdinPipe()
-		if err != nil {
-			return nil, xerrors.Errorf("create pipe: %w", err)
+		if c.Stdin {
+			process.stdin, err = process.cmd.StdinPipe()
+			if err != nil {
+				return nil, xerrors.Errorf("create pipe: %w", err)
+			}
+		} else {
+			process.stdin = disabledStdinWriter{}
 		}
 
 		process.stdout, err = process.cmd.StdoutPipe()
@@ -112,6 +116,7 @@ func (l LocalExecer) Start(ctx context.Context, c Command) (Process, error) {
 		if err != nil {
 			return nil, xerrors.Errorf("create pipe: %w", err)
 		}
+
 		err = process.cmd.Start()
 		if err != nil {
 			return nil, xerrors.Errorf("start command: %w", err)
@@ -119,4 +124,14 @@ func (l LocalExecer) Start(ctx context.Context, c Command) (Process, error) {
 	}
 
 	return &process, nil
+}
+
+type disabledStdinWriter struct{}
+
+func (w disabledStdinWriter) Close() error {
+	return nil
+}
+
+func (w disabledStdinWriter) Write(a []byte) (written int, err error) {
+	return 0, xerrors.Errorf("stdin is not enabled for this command")
 }

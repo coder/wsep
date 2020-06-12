@@ -30,6 +30,7 @@ type Command struct {
 	Command    string
 	Args       []string
 	TTY        bool
+	Stdin      bool
 	UID        uint32
 	GID        uint32
 	Env        []string
@@ -59,9 +60,11 @@ func (r remoteExec) Start(ctx context.Context, c Command) (Process, error) {
 	if err != nil {
 		return nil, xerrors.Errorf("failed to parse pid message: %w", err)
 	}
+
 	rp := remoteProcess{
 		ctx:    ctx,
 		conn:   r.conn,
+		cmd:    c,
 		pid:    pidHeader.Pid,
 		done:   make(chan error),
 		stderr: newPipe(),
@@ -77,6 +80,7 @@ func (r remoteExec) Start(ctx context.Context, c Command) (Process, error) {
 
 type remoteProcess struct {
 	ctx    context.Context
+	cmd    Command
 	conn   *websocket.Conn
 	pid    int
 	done   chan error
@@ -151,7 +155,7 @@ func (r remoteProcess) listen(ctx context.Context) {
 		defer r.stdout.w.Close()
 		defer r.stderr.w.Close()
 
-		buf := make([]byte, 32<<10) // max size of one websocket message
+		buf := make([]byte, maxMessageSize) // max size of one websocket message
 		for {
 			if err := ctx.Err(); err != nil {
 				r.done <- xerrors.Errorf("process canceled: %w", err)
@@ -212,6 +216,9 @@ func (r remoteProcess) Pid() int {
 }
 
 func (r remoteProcess) Stdin() io.WriteCloser {
+	if !r.cmd.Stdin {
+		return disabledStdinWriter{}
+	}
 	return r.stdin
 }
 

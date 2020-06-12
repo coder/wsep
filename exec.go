@@ -47,6 +47,7 @@ func mapToProtoCmd(c Command) proto.Command {
 	return proto.Command{
 		Command:    c.Command,
 		Args:       c.Args,
+		Stdin:      c.Stdin,
 		TTY:        c.TTY,
 		UID:        c.UID,
 		GID:        c.GID,
@@ -59,6 +60,7 @@ func mapToClientCmd(c proto.Command) Command {
 	return Command{
 		Command:    c.Command,
 		Args:       c.Args,
+		Stdin:      c.Stdin,
 		TTY:        c.TTY,
 		UID:        c.UID,
 		GID:        c.GID,
