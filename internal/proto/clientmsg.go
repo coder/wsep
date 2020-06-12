@@ -25,6 +25,7 @@ type ClientStartHeader struct {
 type Command struct {
 	Command    string   `json:"command"`
 	Args       []string `json:"args"`
+	Stdin      bool     `json:"stdin"`
 	TTY        bool     `json:"tty"`
 	UID        uint32   `json:"uid"`
 	GID        uint32   `json:"gid"`

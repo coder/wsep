@@ -28,6 +28,7 @@ func testTTY(ctx context.Context, t *testing.T, e Execer) {
 	process, err := e.Start(ctx, Command{
 		Command: "bash",
 		TTY:     true,
+		Stdin:   true,
 	})
 	assert.Success(t, "start bash", err)
 	var wg sync.WaitGroup

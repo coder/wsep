@@ -19,7 +19,8 @@ This must be the first Client message.
   "command": {
     "command": "cat",
     "args": ["/dev/urandom"],
-    "tty": false
+    "tty": false,
+    "stdin": false
   }
 }
 ```
