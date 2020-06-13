@@ -71,7 +71,7 @@ func Serve(ctx context.Context, c *websocket.Conn, execer Execer) error {
 				return err
 			}
 
-			sendPID(ctx, process.Pid(), wsNetConn)
+			_ = sendPID(ctx, process.Pid(), wsNetConn)
 
 			var outputgroup errgroup.Group
 			outputgroup.Go(func() error {
@@ -85,11 +85,11 @@ func Serve(ctx context.Context, c *websocket.Conn, execer Execer) error {
 				defer wsNetConn.Close()
 				_ = outputgroup.Wait()
 				err = process.Wait()
-				if exitErr, ok := err.(*ExitError); ok {
-					sendExitCode(ctx, exitErr.Code, wsNetConn)
+				if exitErr, ok := err.(ExitError); ok {
+					_ = sendExitCode(ctx, exitErr.Code, wsNetConn)
 					return
 				}
-				sendExitCode(ctx, 0, wsNetConn)
+				_ = sendExitCode(ctx, 0, wsNetConn)
 			}()
 		case proto.TypeResize:
 			if process == nil {
@@ -122,23 +122,25 @@ func Serve(ctx context.Context, c *websocket.Conn, execer Execer) error {
 	}
 }
 
-func sendExitCode(ctx context.Context, exitCode int, conn net.Conn) {
+func sendExitCode(ctx context.Context, exitCode int, conn net.Conn) error {
 	header, err := json.Marshal(proto.ServerExitCodeHeader{
 		Type:     proto.TypeExitCode,
 		ExitCode: exitCode,
 	})
 	if err != nil {
-		return
+		return err
 	}
-	proto.WithHeader(conn, header).Write(nil)
+	_, err = proto.WithHeader(conn, header).Write(nil)
+	return err
 }
 
-func sendPID(ctx context.Context, pid int, conn net.Conn) {
+func sendPID(ctx context.Context, pid int, conn net.Conn) error {
 	header, err := json.Marshal(proto.ServerPidHeader{Type: proto.TypePid, Pid: pid})
 	if err != nil {
-		return
+		return err
 	}
-	proto.WithHeader(conn, header).Write(nil)
+	_, err = proto.WithHeader(conn, header).Write(nil)
+	return err
 }
 
 func copyWithHeader(r io.Reader, w io.Writer, header proto.Header) error {

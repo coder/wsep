@@ -67,8 +67,8 @@ func TestExitCode(t *testing.T) {
 	assert.Success(t, "start local cmd", err)
 
 	err = process.Wait()
-	exitErr, ok := err.(*ExitError)
-	assert.True(t, "error is *ExitError", ok)
+	exitErr, ok := err.(ExitError)
+	assert.True(t, "error is ExitError", ok)
 	assert.Equal(t, "exit error", exitErr.Code, 127)
 }
 

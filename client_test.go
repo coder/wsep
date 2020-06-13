@@ -81,3 +81,31 @@ func TestRemoteExec(t *testing.T) {
 	execer := RemoteExecer(ws)
 	testExecer(ctx, t, execer)
 }
+
+func TestRemoteExecFail(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	ws, server := mockConn(ctx, t)
+	defer server.Close()
+
+	execer := RemoteExecer(ws)
+	testExecerFail(ctx, t, execer)
+}
+
+func testExecerFail(ctx context.Context, t *testing.T, execer Execer) {
+	process, err := execer.Start(ctx, Command{
+		Command: "ls",
+		Args:    []string{"/doesnotexist"},
+	})
+	assert.Success(t, "start local cmd", err)
+
+	go io.Copy(ioutil.Discard, process.Stderr())
+	go io.Copy(ioutil.Discard, process.Stdout())
+
+	err = process.Wait()
+	code, ok := err.(ExitError)
+	assert.True(t, "is exit error", ok)
+	assert.True(t, "exit code is nonzero", code.Code != 0)
+	assert.Error(t, "wait for process to error", err)
+}

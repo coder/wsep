@@ -156,11 +156,7 @@ func (r remoteProcess) listen(ctx context.Context) {
 		defer r.stderr.w.Close()
 
 		buf := make([]byte, maxMessageSize) // max size of one websocket message
-		for {
-			if err := ctx.Err(); err != nil {
-				r.done <- xerrors.Errorf("process canceled: %w", err)
-				break
-			}
+		for ctx.Err() == nil {
 			_, payload, err := r.conn.Read(ctx)
 			if err != nil {
 				continue
@@ -195,7 +191,7 @@ func (r remoteProcess) listen(ctx context.Context) {
 				return nil
 			}
 		}
-		return nil
+		return ctx.Err()
 	})
 
 	err := eg.Wait()
