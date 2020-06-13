@@ -61,6 +61,15 @@ func (r remoteExec) Start(ctx context.Context, c Command) (Process, error) {
 		return nil, xerrors.Errorf("failed to parse pid message: %w", err)
 	}
 
+	var stdin io.WriteCloser
+	if c.Stdin {
+		stdin = remoteStdin{
+			conn: websocket.NetConn(ctx, r.conn, websocket.MessageBinary),
+		}
+	} else {
+		stdin = disabledStdinWriter{}
+	}
+
 	rp := remoteProcess{
 		ctx:    ctx,
 		conn:   r.conn,
@@ -69,9 +78,7 @@ func (r remoteExec) Start(ctx context.Context, c Command) (Process, error) {
 		done:   make(chan error),
 		stderr: newPipe(),
 		stdout: newPipe(),
-		stdin: remoteStdin{
-			conn: websocket.NetConn(ctx, r.conn, websocket.MessageBinary),
-		},
+		stdin:  stdin,
 	}
 
 	go rp.listen(ctx)
@@ -84,7 +91,7 @@ type remoteProcess struct {
 	conn   *websocket.Conn
 	pid    int
 	done   chan error
-	stdin  remoteStdin
+	stdin  io.WriteCloser
 	stdout pipe
 	stderr pipe
 }
