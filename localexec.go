@@ -42,7 +42,7 @@ func (l *localProcess) Stderr() io.Reader {
 func (l *localProcess) Wait() error {
 	err := l.cmd.Wait()
 	if exitErr, ok := err.(*exec.ExitError); ok {
-		return &ExitError{
+		return ExitError{
 			Code: exitErr.ExitCode(),
 		}
 	}
