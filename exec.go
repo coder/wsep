@@ -1,11 +1,14 @@
 package wsep
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
+	"sync"
 
 	"cdr.dev/wsep/internal/proto"
+	"golang.org/x/xerrors"
 )
 
 // ExitError is sent when the command terminates.
@@ -40,6 +43,42 @@ type Process interface {
 // Execer starts commands.
 type Execer interface {
 	Start(ctx context.Context, c Command) (Process, error)
+}
+
+type syncWriter struct {
+	W  io.Writer
+	mu sync.Mutex
+}
+
+func (w *syncWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	return w.W.Write(p)
+}
+
+// CombinedOutput runs the command through the execer combining
+// the output from stderr and stdout. If err != nil then out will
+// have any error output from the command.
+// The function makes no effort to limit output.
+func CombinedOutput(ctx context.Context, execer Execer, c Command) (out []byte, err error) {
+	proc, err := execer.Start(ctx, c)
+	if err != nil {
+		return nil, xerrors.Errorf("start execer: %w", err)
+	}
+
+	var (
+		buf bytes.Buffer
+		sw  = &syncWriter{
+			W: &buf,
+		}
+	)
+
+	go io.Copy(sw, proc.Stderr())
+	go io.Copy(sw, proc.Stdout())
+
+	err = proc.Wait()
+	return buf.Bytes(), err
 }
 
 // theses maps are needed to prevent an import cycle

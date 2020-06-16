@@ -117,3 +117,23 @@ func TestStdinFail(t *testing.T) {
 	err = process.Wait()
 	assert.Success(t, "process wait", err)
 }
+
+func TestCombinedOutput(t *testing.T) {
+	t.Run("OK", func(t *testing.T) {
+		out, err := CombinedOutput(context.Background(), LocalExecer{}, Command{
+			Command: "echo",
+			Args:    []string{"hello"},
+		})
+		assert.Success(t, "failed to run command", err)
+		assert.Equal(t, "unexpected output", "hello\n", string(out))
+	})
+
+	t.Run("StdErr", func(t *testing.T) {
+		out, err := CombinedOutput(context.Background(), LocalExecer{}, Command{
+			Command: "/bin/bash",
+			Args:    []string{"-c", ">&2 echo 'error' && exit 1"},
+		})
+		assert.Error(t, "command unexpectedly succeeded", err)
+		assert.Equal(t, "unexpected output", "error\n", string(out))
+	})
+}
