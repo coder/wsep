@@ -166,7 +166,7 @@ func (r remoteProcess) listen(ctx context.Context) {
 		for ctx.Err() == nil {
 			_, payload, err := r.conn.Read(ctx)
 			if err != nil {
-				continue
+				return err
 			}
 			headerByt, body := proto.SplitMessage(payload)
 
