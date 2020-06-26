@@ -74,7 +74,7 @@ func (l LocalExecer) Start(ctx context.Context, c Command) (Process, error) {
 		err     error
 	)
 	process.cmd = exec.CommandContext(ctx, c.Command, c.Args...)
-	process.cmd.Env = c.Env
+	process.cmd.Env = append(os.Environ(), c.Env...)
 	process.cmd.Dir = c.WorkingDir
 
 	if c.GID != 0 || c.UID != 0 {
