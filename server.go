@@ -122,7 +122,7 @@ func Serve(ctx context.Context, c *websocket.Conn, execer Execer) error {
 	}
 }
 
-func sendExitCode(ctx context.Context, exitCode int, conn net.Conn) error {
+func sendExitCode(_ context.Context, exitCode int, conn net.Conn) error {
 	header, err := json.Marshal(proto.ServerExitCodeHeader{
 		Type:     proto.TypeExitCode,
 		ExitCode: exitCode,
@@ -134,7 +134,7 @@ func sendExitCode(ctx context.Context, exitCode int, conn net.Conn) error {
 	return err
 }
 
-func sendPID(ctx context.Context, pid int, conn net.Conn) error {
+func sendPID(_ context.Context, pid int, conn net.Conn) error {
 	header, err := json.Marshal(proto.ServerPidHeader{Type: proto.TypePid, Pid: pid})
 	if err != nil {
 		return err

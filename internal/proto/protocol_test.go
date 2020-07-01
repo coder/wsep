@@ -31,7 +31,8 @@ func TestWithHeader(t *testing.T) {
 	for _, tcase := range tests {
 		b := bytes.NewBuffer(nil)
 		withheader := WithHeader(b, []byte(tcase.inputheader))
-		withheader.Write([]byte(tcase.inputbody))
+		_, err := withheader.Write([]byte(tcase.inputbody))
+		assert.Success(t, "write to buffer with header", err)
 
 		msg, err := ioutil.ReadAll(b)
 		assert.Success(t, "read buffer", err)

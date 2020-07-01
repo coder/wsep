@@ -19,10 +19,10 @@ func (e ExitError) Error() string {
 
 // Process represents a started command.
 type Process interface {
-	// Pid is populated immediately during a successfull start with the process ID.
+	// Pid is populated immediately during a successful start with the process ID.
 	Pid() int
 	// Stdout returns an io.WriteCloser that will pipe writes to the remote command.
-	// Closure of stdin sends the correspoding close messsage.
+	// Closure of stdin sends the corresponding close message.
 	Stdin() io.WriteCloser
 	// Stdout returns an io.Reader that is connected to the command's standard output.
 	Stdout() io.Reader
