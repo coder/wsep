@@ -1,6 +1,6 @@
 # Protocol
 
-Each Message is represented as a single WebSocket message. A newline character separates a JSON header from the binary body.
+Each message is represented as a single WebSocket message. A newline character separates a JSON header from the binary body.
 
 Some messages may omit the body.
 

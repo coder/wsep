@@ -89,20 +89,3 @@ $ head -c 100000000 /dev/urandom > /tmp/random; cat /tmp/random | pv | time  sh 
 95.4MiB 0:00:00 [1.73GiB/s] [ <=>                                                                                  ]
 sh -c "cat > /dev/null"  0.00s user 0.02s system 32% cpu 0.057 total
 ```
-
-### Performance Goals
-
-Test command
-
-```shell script
-head -c 100000000 /dev/urandom > /tmp/random; cat /tmp/random | pv | time coder sh ammar sh -c "cat > /dev/null"
-```
-
-streams at
-
-```shell script
-95.4MiB 0:00:08 [10.7MiB/s] [                                <=>                                                                                                                                                  ]
-       15.34 real         2.16 user         1.54 sys
-```
-
-The same command over wush stdout (which is high performance) streams at 17MB/s.

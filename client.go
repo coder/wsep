@@ -205,7 +205,7 @@ func (r remoteProcess) listen(ctx context.Context) {
 	select {
 	case exitCode := <-exitCode:
 		if exitCode != 0 {
-			r.done <- ExitError{Code: int(exitCode)}
+			r.done <- ExitError{Code: exitCode}
 			return
 		}
 		r.done <- nil
