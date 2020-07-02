@@ -130,20 +130,18 @@ func TestStdoutVsStderr(t *testing.T) {
 	)
 	process, err := execer.Start(ctx, Command{
 		Command: "sh",
-		Args: []string{"-c", "echo stdout-message; echo 1>&2 stderr-message"},
-		Stdin: false,
-		TTY: false,
+		Args:    []string{"-c", "echo stdout-message; echo 1>&2 stderr-message"},
+		Stdin:   false,
+		TTY:     false,
 	})
 	assert.Success(t, "start command", err)
 
 	go io.Copy(&stdout, process.Stdout())
 	go io.Copy(&stderr, process.Stderr())
 
-	time.Sleep(time.Second)
 	err = process.Wait()
 	assert.Success(t, "wait for process to complete", err)
 
 	assert.Equal(t, "stdout", "stdout-message", strings.TrimSpace(stdout.String()))
 	assert.Equal(t, "stderr", "stderr-message", strings.TrimSpace(stderr.String()))
 }
-

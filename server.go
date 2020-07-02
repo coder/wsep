@@ -78,7 +78,7 @@ func Serve(ctx context.Context, c *websocket.Conn, execer Execer) error {
 				return copyWithHeader(process.Stdout(), wsNetConn, proto.Header{Type: proto.TypeStdout})
 			})
 			outputgroup.Go(func() error {
-				return copyWithHeader(process.Stderr(), wsNetConn, proto.Header{Type: proto.TypeStdout})
+				return copyWithHeader(process.Stderr(), wsNetConn, proto.Header{Type: proto.TypeStderr})
 			})
 
 			go func() {

@@ -109,3 +109,33 @@ func testExecerFail(ctx context.Context, t *testing.T, execer Execer) {
 	assert.True(t, "exit code is nonzero", code.Code != 0)
 	assert.Error(t, "wait for process to error", err)
 }
+
+func TestStderrVsStdout(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	var (
+		stdout bytes.Buffer
+		stderr bytes.Buffer
+	)
+
+	ws, server := mockConn(ctx, t)
+	defer server.Close()
+
+	execer := RemoteExecer(ws)
+	process, err := execer.Start(ctx, Command{
+		Command: "sh",
+		Args:    []string{"-c", "echo stdout-message; echo 1>&2 stderr-message"},
+		Stdin:   false,
+	})
+	assert.Success(t, "start command", err)
+
+	go io.Copy(&stdout, process.Stdout())
+	go io.Copy(&stderr, process.Stderr())
+
+	err = process.Wait()
+	assert.Success(t, "wait for process to complete", err)
+
+	assert.Equal(t, "stdout", "stdout-message", strings.TrimSpace(stdout.String()))
+	assert.Equal(t, "stderr", "stderr-message", strings.TrimSpace(stderr.String()))
+}
