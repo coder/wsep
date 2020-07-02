@@ -134,6 +134,6 @@ func (w disabledStdinWriter) Close() error {
 	return nil
 }
 
-func (w disabledStdinWriter) Write(a []byte) (written int, err error) {
+func (w disabledStdinWriter) Write(_ []byte) (written int, err error) {
 	return 0, xerrors.Errorf("stdin is not enabled for this command")
 }
