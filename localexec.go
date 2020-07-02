@@ -90,6 +90,8 @@ func (l LocalExecer) Start(ctx context.Context, c Command) (Process, error) {
 	}
 
 	if c.TTY {
+		// This special WSEP_TTY variable helps debug unexpected TTYs.
+		process.cmd.Env = append(process.cmd.Env, "WSEP_TTY=true")
 		process.tty, err = pty.Start(process.cmd)
 		if err != nil {
 			return nil, xerrors.Errorf("start command with pty: %w", err)
