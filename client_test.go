@@ -19,6 +19,7 @@ import (
 )
 
 func TestRemoteStdin(t *testing.T) {
+	t.Parallel()
 	inputs := []string{
 		"pwd",
 		"echo 123\n456",
@@ -72,6 +73,7 @@ func mockConn(ctx context.Context, t *testing.T) (*websocket.Conn, *httptest.Ser
 }
 
 func TestRemoteExec(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
@@ -83,6 +85,7 @@ func TestRemoteExec(t *testing.T) {
 }
 
 func TestRemoteExecFail(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
@@ -111,6 +114,7 @@ func testExecerFail(ctx context.Context, t *testing.T, execer Execer) {
 }
 
 func TestStderrVsStdout(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 

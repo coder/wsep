@@ -1,3 +1,5 @@
+// +build !windows
+
 package main
 
 import (
@@ -9,10 +11,11 @@ import (
 
 	"cdr.dev/wsep"
 	"github.com/spf13/pflag"
-	"go.coder.com/cli"
-	"go.coder.com/flog"
 	"golang.org/x/crypto/ssh/terminal"
 	"nhooyr.io/websocket"
+
+	"go.coder.com/cli"
+	"go.coder.com/flog"
 )
 
 type notty struct {

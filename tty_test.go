@@ -3,6 +3,7 @@ package wsep
 import (
 	"context"
 	"io/ioutil"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -13,6 +14,12 @@ import (
 )
 
 func TestTTY(t *testing.T) {
+	t.Parallel()
+
+	if runtime.GOOS == "windows" {
+		t.Skip("Skip TTY tests on windows")
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -26,11 +33,11 @@ func TestTTY(t *testing.T) {
 
 func testTTY(ctx context.Context, t *testing.T, e Execer) {
 	process, err := e.Start(ctx, Command{
-		Command: "bash",
+		Command: "sh",
 		TTY:     true,
 		Stdin:   true,
 	})
-	assert.Success(t, "start bash", err)
+	assert.Success(t, "start sh", err)
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {

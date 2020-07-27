@@ -6,6 +6,8 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -15,6 +17,7 @@ import (
 )
 
 func TestLocalExec(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
@@ -41,6 +44,10 @@ func testExecer(ctx context.Context, t *testing.T, execer Execer) {
 		wd, err := os.Getwd()
 		assert.Success(t, "get real working dir", err)
 
+		if runtime.GOOS == "windows" {
+			wd = strings.Replace(wd, `D:`, `\d`, 1)
+			wd = filepath.ToSlash(wd)
+		}
 		assert.Equal(t, "stdout", wd, strings.TrimSuffix(string(stdoutByt), "\n"))
 	}()
 	wg.Add(1)
@@ -58,11 +65,12 @@ func testExecer(ctx context.Context, t *testing.T, execer Execer) {
 }
 
 func TestExitCode(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	process, err := LocalExecer{}.Start(ctx, Command{
-		Command: "/bin/sh",
+		Command: "sh",
 		Args:    []string{"-c", `"fakecommand"`},
 	})
 	assert.Success(t, "start local cmd", err)
@@ -70,7 +78,12 @@ func TestExitCode(t *testing.T) {
 	err = process.Wait()
 	exitErr, ok := err.(ExitError)
 	assert.True(t, "error is ExitError", ok)
-	assert.Equal(t, "exit error", exitErr.Code, 127)
+
+	if runtime.GOOS == "windows" {
+		assert.Equal(t, "exit error", exitErr.Code, 1)
+	} else {
+		assert.Equal(t, "exit error", exitErr.Code, 127)
+	}
 }
 
 func TestStdin(t *testing.T) {
@@ -97,6 +110,7 @@ func TestStdin(t *testing.T) {
 }
 
 func TestStdinFail(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
