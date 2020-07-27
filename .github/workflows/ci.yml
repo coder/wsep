@@ -31,9 +31,15 @@ jobs:
         with:
           args: ./ci/lint.sh
   test:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v1
+      - uses: actions/setup-go@v1
+        with:
+          go-version: '1.14'
       - uses: actions/cache@v1
         with:
           path: ~/go/pkg/mod
@@ -41,6 +47,4 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-go-
       - name: test
-        uses: ./ci/image
-        with:
-          args: go test ./...
+        run: go test ./...
