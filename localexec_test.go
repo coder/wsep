@@ -15,6 +15,7 @@ import (
 )
 
 func TestLocalExec(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
@@ -58,11 +59,12 @@ func testExecer(ctx context.Context, t *testing.T, execer Execer) {
 }
 
 func TestExitCode(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	process, err := LocalExecer{}.Start(ctx, Command{
-		Command: "/bin/sh",
+		Command: "sh",
 		Args:    []string{"-c", `"fakecommand"`},
 	})
 	assert.Success(t, "start local cmd", err)
@@ -97,6 +99,7 @@ func TestStdin(t *testing.T) {
 }
 
 func TestStdinFail(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
