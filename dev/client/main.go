@@ -73,6 +73,7 @@ func do(fl *pflag.FlagSet, tty bool) {
 		Command: fl.Arg(0),
 		Args:    args,
 		TTY:     tty,
+		Stdin:   true,
 	})
 	if err != nil {
 		flog.Fatal("failed to start remote command: %v", err)
