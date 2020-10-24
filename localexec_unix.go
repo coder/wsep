@@ -96,10 +96,9 @@ func (l LocalExecer) Start(ctx context.Context, c Command) (Process, error) {
 	if l.ChildProcessPriority != nil {
 		pid := process.cmd.Process.Pid
 		niceness := *l.ChildProcessPriority
-		err := syscall.Setpriority(syscall.PRIO_PROCESS, pid, niceness)
-		if err != nil {
-			return nil, xerrors.Errorf("set process (pid: %d) priority to (niceness: %d): %w", pid, niceness, err)
-		}
+
+		// the environment may block the niceness syscall
+		_ = syscall.Setpriority(syscall.PRIO_PROCESS, pid, niceness)
 	}
 
 	return &process, nil
