@@ -9,6 +9,8 @@ import (
 
 // LocalExecer executes command on the local system.
 type LocalExecer struct {
+	// ChildProcessPriority overrides the default niceness of all child processes launch by LocalExecer.
+	ChildProcessPriority *int
 }
 
 func (l *localProcess) Stdin() io.WriteCloser {
