@@ -11,7 +11,7 @@ import (
 
 	"cdr.dev/wsep"
 	"github.com/spf13/pflag"
-	"golang.org/x/crypto/ssh/terminal"
+	"golang.org/x/term"
 	"nhooyr.io/websocket"
 
 	"go.coder.com/cli"
@@ -83,7 +83,7 @@ func do(fl *pflag.FlagSet, tty bool) {
 		signal.Notify(ch, syscall.SIGWINCH)
 		go func() {
 			for range ch {
-				width, height, err := terminal.GetSize(int(os.Stdin.Fd()))
+				width, height, err := term.GetSize(int(os.Stdin.Fd()))
 				if err != nil {
 					continue
 				}
@@ -92,11 +92,11 @@ func do(fl *pflag.FlagSet, tty bool) {
 		}()
 		ch <- syscall.SIGWINCH
 
-		oldState, err := terminal.MakeRaw(int(os.Stdin.Fd()))
+		oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
 		if err != nil {
 			flog.Fatal("failed to make terminal raw for tty: %w", err)
 		}
-		defer terminal.Restore(int(os.Stdin.Fd()), oldState)
+		defer term.Restore(int(os.Stdin.Fd()), oldState)
 	}
 
 	go io.Copy(os.Stdout, process.Stdout())
