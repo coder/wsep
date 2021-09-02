@@ -75,7 +75,7 @@ func (r remoteExec) Start(ctx context.Context, c Command) (Process, error) {
 		conn:   r.conn,
 		cmd:    c,
 		pid:    pidHeader.Pid,
-		done:   make(chan error),
+		done:   make(chan error, 1),
 		stderr: newPipe(),
 		stdout: newPipe(),
 		stdin:  stdin,
@@ -154,6 +154,7 @@ func newPipe() pipe {
 
 func (r remoteProcess) listen(ctx context.Context) {
 	defer r.conn.Close(websocket.StatusNormalClosure, "normal closure")
+	defer close(r.done)
 
 	exitCode := make(chan int, 1)
 	var eg errgroup.Group
@@ -206,9 +207,7 @@ func (r remoteProcess) listen(ctx context.Context) {
 	case exitCode := <-exitCode:
 		if exitCode != 0 {
 			r.done <- ExitError{Code: exitCode}
-			return
 		}
-		r.done <- nil
 	default:
 		r.done <- err
 	}
