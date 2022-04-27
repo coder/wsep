@@ -31,8 +31,8 @@ type Options struct {
 // Serve runs the server-side of wsep.
 // The execer may be another wsep connection for chaining.
 // Use LocalExecer for local command execution.
-func Serve(pctx context.Context, c *websocket.Conn, execer Execer, options *Options) error {
-	ctx, cancel := context.WithCancel(pctx)
+func Serve(ctx context.Context, c *websocket.Conn, execer Execer, options *Options) error {
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	if options == nil {
@@ -105,7 +105,8 @@ func Serve(pctx context.Context, c *websocket.Conn, execer Execer, options *Opti
 					}
 					process = rprocess.process
 				} else {
-					process, err = execer.Start(ctx, command)
+					flog.Info("starting command %s", command.Command)
+					process, err = execer.Start(context.Background(), command)
 					if err != nil {
 						return err
 					}
@@ -119,20 +120,16 @@ func Serve(pctx context.Context, c *websocket.Conn, execer Execer, options *Opti
 					}
 					reconnectingProcesses.Store(header.ID, rprocess)
 					go func() {
-						// Close if the inactive timeout occurs, or the context ends.
+						// Close if the inactive timeout occurs.
 						select {
 						case <-rprocess.timeout.C:
 							flog.Info("killing reconnecting process %s due to inactivity", header.ID)
-						case <-pctx.Done():
 						}
 						rprocess.Close()
 					}()
 					go func() {
 						buffer := make([]byte, 32*1024)
 						for {
-							// TODO: This is erroring with "read /dev/ptmx: input/output
-							// error" when the web socket closes causing reconnection to stop
-							// working.
 							read, err := rprocess.process.Stdout().Read(buffer)
 							if err != nil {
 								flog.Error("reconnecting process %s read: %v", header.ID, err)
