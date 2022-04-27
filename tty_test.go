@@ -1,6 +1,7 @@
 package wsep
 
 import (
+	"bufio"
 	"context"
 	"io/ioutil"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"cdr.dev/slog/sloggers/slogtest/assert"
+	"github.com/google/uuid"
 	"nhooyr.io/websocket"
 )
 
@@ -59,4 +61,73 @@ func testTTY(ctx context.Context, t *testing.T, e Execer) {
 
 	process.Close()
 	wg.Wait()
+}
+
+func TestReconnectTTY(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	ws, server := mockConn(ctx, t)
+	defer server.Close()
+
+	command := Command{
+		ID:      uuid.NewString(),
+		Command: "sh",
+		TTY:     true,
+		Stdin:   true,
+	}
+	execer := RemoteExecer(ws)
+	process, err := execer.Start(ctx, command)
+	assert.Success(t, "start sh", err)
+
+	// Write some unique output.
+	echoCmd := "echo test:$((1+1))"
+	data := []byte(echoCmd + "\r\n")
+	_, err = process.Stdin().Write(data)
+	assert.Success(t, "write to stdin", err)
+
+	var scanner *bufio.Scanner
+	findEcho := func(expected string) bool {
+		for scanner.Scan() {
+			line := scanner.Text()
+			t.Logf("bash tty stdout = %s", line)
+			if strings.Contains(line, expected) {
+				return true
+			}
+		}
+		return false
+	}
+
+	// Once for typing the command...
+	scanner = bufio.NewScanner(process.Stdout())
+	assert.True(t, "find command", findEcho(echoCmd))
+	// And another time for the actual output.
+	assert.True(t, "find command eval", findEcho("test:2"))
+
+	// Disconnect.
+	ws.Close(websocket.StatusNormalClosure, "disconnected")
+	server.Close()
+
+	ws, server = mockConn(ctx, t)
+	defer server.Close()
+
+	execer = RemoteExecer(ws)
+	process, err = execer.Start(ctx, command)
+	assert.Success(t, "attach sh", err)
+
+	// Same output again.
+	scanner = bufio.NewScanner(process.Stdout())
+	assert.True(t, "find command", findEcho(echoCmd))
+	assert.True(t, "find command eval", findEcho("test:2"))
+
+	// Should be able to use the new connection.
+	echoCmd = "echo test:$((2+2))"
+	data = []byte(echoCmd + "\r\n")
+	_, err = process.Stdin().Write(data)
+	assert.Success(t, "write to stdin", err)
+
+	assert.True(t, "find command", findEcho(echoCmd))
+	assert.True(t, "find command eval", findEcho("test:4"))
 }
