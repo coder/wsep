@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/armon/circbuf"
 	"github.com/google/uuid"
-	"github.com/smallnest/ringbuffer"
 
 	"go.coder.com/flog"
 	"golang.org/x/sync/errgroup"
@@ -110,11 +110,16 @@ func Serve(ctx context.Context, c *websocket.Conn, execer Execer, options *Optio
 						return err
 					}
 
+					ringBuffer, err := circbuf.NewBuffer(1 << 20)
+					if err != nil {
+						return xerrors.Errorf("unable to create ring buffer %w", err)
+					}
+
 					rprocess = &reconnectingProcess{
 						activeConns: make(map[string]net.Conn),
 						process:     process,
 						// Default to buffer 1MB.
-						ringBuffer: ringbuffer.New(1 << 20),
+						ringBuffer: ringBuffer,
 					}
 					reconnectingProcesses.Store(header.ID, rprocess)
 					go func() {
@@ -295,7 +300,7 @@ type reconnectingProcess struct {
 	activeConnsMutex sync.Mutex
 	activeConns      map[string]net.Conn
 
-	ringBuffer    *ringbuffer.RingBuffer
+	ringBuffer    *circbuf.Buffer
 	timeoutCancel context.CancelFunc
 	process       Process
 }
