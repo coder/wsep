@@ -20,7 +20,7 @@ func TestTTY(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	ws, server := mockConn(ctx, t)
+	ws, server := mockConn(ctx, t, nil)
 	defer ws.Close(websocket.StatusInternalError, "")
 	defer server.Close()
 
@@ -69,7 +69,9 @@ func TestReconnectTTY(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	ws, server := mockConn(ctx, t)
+	ws, server := mockConn(ctx, t, &Options{
+		ReconnectingProcessTimeout: time.Second,
+	})
 	defer server.Close()
 
 	command := Command{
@@ -87,47 +89,90 @@ func TestReconnectTTY(t *testing.T) {
 	data := []byte(echoCmd + "\r\n")
 	_, err = process.Stdin().Write(data)
 	assert.Success(t, "write to stdin", err)
+	expected := []string{echoCmd, "test:2"}
 
-	var scanner *bufio.Scanner
-	findEcho := func(expected string) bool {
-		for scanner.Scan() {
-			line := scanner.Text()
-			t.Logf("bash tty stdout = %s", line)
-			if strings.Contains(line, expected) {
-				return true
+	findEcho := func(expected []string) bool {
+		scanner := bufio.NewScanner(process.Stdout())
+	outer:
+		for _, str := range expected {
+			for scanner.Scan() {
+				line := scanner.Text()
+				t.Logf("bash tty stdout = %s", line)
+				if strings.Contains(line, str) {
+					continue outer
+				}
 			}
+			return false // Reached the end of output without finding str.
 		}
-		return false
+		return true
 	}
 
-	// Once for typing the command...
-	scanner = bufio.NewScanner(process.Stdout())
-	assert.True(t, "find command", findEcho(echoCmd))
-	// And another time for the actual output.
-	assert.True(t, "find command eval", findEcho("test:2"))
+	assert.True(t, "find echo", findEcho(expected))
 
-	// Disconnect.
+	// Test disconnecting (which starts inactivity) then reconnecting (which
+	// cancels it).
 	ws.Close(websocket.StatusNormalClosure, "disconnected")
 	server.Close()
 
-	ws, server = mockConn(ctx, t)
+	ws, server = mockConn(ctx, t, &Options{
+		ReconnectingProcessTimeout: time.Second,
+	})
 	defer server.Close()
 
 	execer = RemoteExecer(ws)
 	process, err = execer.Start(ctx, command)
 	assert.Success(t, "attach sh", err)
 
-	// Same output again.
-	scanner = bufio.NewScanner(process.Stdout())
-	assert.True(t, "find command", findEcho(echoCmd))
-	assert.True(t, "find command eval", findEcho("test:2"))
+	// The inactivity timeout should not have been triggered.
+	time.Sleep(time.Second)
 
-	// Should be able to use the new connection.
 	echoCmd = "echo test:$((2+2))"
 	data = []byte(echoCmd + "\r\n")
 	_, err = process.Stdin().Write(data)
 	assert.Success(t, "write to stdin", err)
+	expected = append(expected, echoCmd, "test:4")
 
-	assert.True(t, "find command", findEcho(echoCmd))
-	assert.True(t, "find command eval", findEcho("test:4"))
+	assert.True(t, "find echo", findEcho(expected))
+
+	// Test disconnecting while another connection is active (which should skip
+	// starting inactivity entirely).
+	ws2, server2 := mockConn(ctx, t, &Options{
+		ReconnectingProcessTimeout: time.Millisecond,
+	})
+	defer server2.Close()
+
+	execer = RemoteExecer(ws2)
+	process, err = execer.Start(ctx, command)
+	assert.Success(t, "attach sh", err)
+
+	ws.Close(websocket.StatusNormalClosure, "disconnected")
+	server.Close()
+	time.Sleep(time.Second)
+
+	// This connection should still be up.
+	echoCmd = "echo test:$((3+3))"
+	data = []byte(echoCmd + "\r\n")
+	_, err = process.Stdin().Write(data)
+	assert.Success(t, "write to stdin", err)
+	expected = append(expected, echoCmd, "test:6")
+
+	assert.True(t, "find echo", findEcho(expected))
+
+	// Close the remaining connection and wait for inactivity.
+	ws2.Close(websocket.StatusNormalClosure, "disconnected")
+	server2.Close()
+	time.Sleep(time.Second)
+
+	// The next connection should start a new process.
+	ws, server = mockConn(ctx, t, &Options{
+		ReconnectingProcessTimeout: time.Second,
+	})
+	defer server.Close()
+
+	execer = RemoteExecer(ws)
+	process, err = execer.Start(ctx, command)
+	assert.Success(t, "attach sh", err)
+
+	// This time no echo since it is a new process.
+	assert.True(t, "find echo", !findEcho(expected))
 }

@@ -49,14 +49,14 @@ func TestRemoteStdin(t *testing.T) {
 	}
 }
 
-func mockConn(ctx context.Context, t *testing.T) (*websocket.Conn, *httptest.Server) {
+func mockConn(ctx context.Context, t *testing.T, options *Options) (*websocket.Conn, *httptest.Server) {
 	mockServerHandler := func(w http.ResponseWriter, r *http.Request) {
 		ws, err := websocket.Accept(w, r, nil)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		err = Serve(r.Context(), ws, LocalExecer{}, nil)
+		err = Serve(r.Context(), ws, LocalExecer{}, options)
 		if err != nil {
 			t.Errorf("failed to serve execer: %v", err)
 			ws.Close(websocket.StatusAbnormalClosure, "failed to serve execer")
@@ -77,7 +77,7 @@ func TestRemoteExec(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	ws, server := mockConn(ctx, t)
+	ws, server := mockConn(ctx, t, nil)
 	defer server.Close()
 
 	execer := RemoteExecer(ws)
@@ -89,7 +89,7 @@ func TestRemoteExecFail(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	ws, server := mockConn(ctx, t)
+	ws, server := mockConn(ctx, t, nil)
 	defer server.Close()
 
 	execer := RemoteExecer(ws)
@@ -123,7 +123,7 @@ func TestStderrVsStdout(t *testing.T) {
 		stderr bytes.Buffer
 	)
 
-	ws, server := mockConn(ctx, t)
+	ws, server := mockConn(ctx, t, nil)
 	defer server.Close()
 
 	execer := RemoteExecer(ws)

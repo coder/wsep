@@ -105,7 +105,6 @@ func Serve(ctx context.Context, c *websocket.Conn, execer Execer, options *Optio
 					}
 					process = rprocess.process
 				} else {
-					flog.Info("starting command %s", command.Command)
 					process, err = execer.Start(context.Background(), command)
 					if err != nil {
 						return err
@@ -114,19 +113,10 @@ func Serve(ctx context.Context, c *websocket.Conn, execer Execer, options *Optio
 					rprocess = &reconnectingProcess{
 						activeConns: make(map[string]net.Conn),
 						process:     process,
-						timeout:     time.NewTimer(options.ReconnectingProcessTimeout),
 						// Default to buffer 1MB.
 						ringBuffer: ringbuffer.New(1 << 20),
 					}
 					reconnectingProcesses.Store(header.ID, rprocess)
-					go func() {
-						// Close if the inactive timeout occurs.
-						select {
-						case <-rprocess.timeout.C:
-							flog.Info("killing reconnecting process %s due to inactivity", header.ID)
-						}
-						rprocess.Close()
-					}()
 					go func() {
 						buffer := make([]byte, 32*1024)
 						for {
@@ -167,11 +157,30 @@ func Serve(ctx context.Context, c *websocket.Conn, execer Execer, options *Optio
 				connectionID := uuid.NewString()
 				rprocess.activeConnsMutex.Lock()
 				rprocess.activeConns[connectionID] = wsNetConn
+				if rprocess.timeoutCancel != nil {
+					rprocess.timeoutCancel()
+					rprocess.timeoutCancel = nil
+				}
 				rprocess.activeConnsMutex.Unlock()
 				defer func() {
 					wsNetConn.Close()
 					rprocess.activeConnsMutex.Lock()
 					delete(rprocess.activeConns, connectionID)
+					if len(rprocess.activeConns) == 0 {
+						timeout := time.NewTimer(options.ReconnectingProcessTimeout)
+						timeoutCtx, cancel := context.WithCancel(context.Background())
+						rprocess.timeoutCancel = cancel
+						go func() {
+							defer cancel()
+							// Close if the inactive timeout occurs.
+							select {
+							case <-timeout.C:
+								flog.Info("killing reconnecting process %s due to inactivity", header.ID)
+								rprocess.Close()
+							case <-timeoutCtx.Done():
+							}
+						}()
+					}
 					rprocess.activeConnsMutex.Unlock()
 				}()
 			} else {
@@ -286,9 +295,9 @@ type reconnectingProcess struct {
 	activeConnsMutex sync.Mutex
 	activeConns      map[string]net.Conn
 
-	ringBuffer *ringbuffer.RingBuffer
-	timeout    *time.Timer
-	process    Process
+	ringBuffer    *ringbuffer.RingBuffer
+	timeoutCancel context.CancelFunc
+	process       Process
 }
 
 func (r *reconnectingProcess) Close() {
