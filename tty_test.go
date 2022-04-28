@@ -109,8 +109,7 @@ func TestReconnectTTY(t *testing.T) {
 
 	assert.True(t, "find echo", findEcho(expected))
 
-	// Test disconnecting (which starts inactivity) then reconnecting (which
-	// cancels it).
+	// Test disconnecting then reconnecting.
 	ws.Close(websocket.StatusNormalClosure, "disconnected")
 	server.Close()
 
@@ -134,10 +133,9 @@ func TestReconnectTTY(t *testing.T) {
 
 	assert.True(t, "find echo", findEcho(expected))
 
-	// Test disconnecting while another connection is active (which should skip
-	// starting inactivity entirely).
+	// Test disconnecting while another connection is active.
 	ws2, server2 := mockConn(ctx, t, &Options{
-		ReconnectingProcessTimeout: time.Millisecond,
+		ReconnectingProcessTimeout: time.Second,
 	})
 	defer server2.Close()
 

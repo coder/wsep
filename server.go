@@ -105,35 +105,66 @@ func Serve(ctx context.Context, c *websocket.Conn, execer Execer, options *Optio
 					}
 					process = rprocess.process
 				} else {
-					process, err = execer.Start(context.Background(), command)
+					// The process will be kept alive as long as this context does not
+					// finish (and as long as the process does not exit on its own).  This
+					// is a new context since the parent context finishes when the request
+					// ends which would kill the process prematurely.
+					ctx, cancel := context.WithCancel(context.Background())
+
+					// The process will be killed if the provided context ends.
+					process, err = execer.Start(ctx, command)
 					if err != nil {
+						cancel()
 						return err
 					}
 
-					ringBuffer, err := circbuf.NewBuffer(1 << 20)
+					// Default to buffer 64KB.
+					ringBuffer, err := circbuf.NewBuffer(64 * 1024)
 					if err != nil {
+						cancel()
 						return xerrors.Errorf("unable to create ring buffer %w", err)
 					}
 
 					rprocess = &reconnectingProcess{
 						activeConns: make(map[string]net.Conn),
 						process:     process,
-						// Default to buffer 1MB.
+						// Timeouts created with AfterFunc can be reset.
+						timeout:    time.AfterFunc(options.ReconnectingProcessTimeout, cancel),
 						ringBuffer: ringBuffer,
 					}
 					reconnectingProcesses.Store(header.ID, rprocess)
+
+					// If the process exits send the exit code to all listening
+					// connections then close everything.
+					go func() {
+						err = process.Wait()
+						code := 0
+						if exitErr, ok := err.(ExitError); ok {
+							code = exitErr.Code
+						}
+						rprocess.activeConnsMutex.Lock()
+						for _, conn := range rprocess.activeConns {
+							_ = sendExitCode(ctx, code, conn)
+						}
+						rprocess.activeConnsMutex.Unlock()
+						rprocess.Close()
+						reconnectingProcesses.Delete(header.ID)
+					}()
+
+					// Write to the ring buffer and all connections as we receive stdout.
 					go func() {
 						buffer := make([]byte, 32*1024)
 						for {
 							read, err := rprocess.process.Stdout().Read(buffer)
 							if err != nil {
-								flog.Error("reconnecting process %s read: %v", header.ID, err)
+								// When the process is closed this is triggered.
 								break
 							}
 							part := buffer[:read]
 							_, err = rprocess.ringBuffer.Write(part)
 							if err != nil {
 								flog.Error("reconnecting process %s write buffer: %v", header.ID, err)
+								cancel()
 								break
 							}
 							rprocess.activeConnsMutex.Lock()
@@ -142,9 +173,6 @@ func Serve(ctx context.Context, c *websocket.Conn, execer Execer, options *Optio
 							}
 							rprocess.activeConnsMutex.Unlock()
 						}
-						// If we break from the loop, the reconnecting PTY ended or errored.
-						rprocess.Close()
-						reconnectingProcesses.Delete(header.ID)
 					}()
 				}
 
@@ -153,39 +181,38 @@ func Serve(ctx context.Context, c *websocket.Conn, execer Execer, options *Optio
 					flog.Error("failed to send pid %d", process.Pid())
 				}
 
-				// Write the initial contents out.
+				// Write out the initial contents in the ring buffer.
 				err = sendOutput(ctx, rprocess.ringBuffer.Bytes(), wsNetConn)
 				if err != nil {
 					return xerrors.Errorf("write reconnecting process %s buffer: %w", header.ID, err)
 				}
 
+				// Store this connection on the reconnecting process.  All connections
+				// stored on the process will receive the process's stdout.
 				connectionID := uuid.NewString()
 				rprocess.activeConnsMutex.Lock()
 				rprocess.activeConns[connectionID] = wsNetConn
-				if rprocess.timeoutCancel != nil {
-					rprocess.timeoutCancel()
-					rprocess.timeoutCancel = nil
-				}
 				rprocess.activeConnsMutex.Unlock()
+
+				// Keep resetting the inactivity timer while this connection is alive.
+				rprocess.timeout.Reset(options.ReconnectingProcessTimeout)
+				heartbeat := time.NewTimer(options.ReconnectingProcessTimeout / 2)
+				defer heartbeat.Stop()
+				go func() {
+					for {
+						select {
+						case <-heartbeat.C:
+						}
+						rprocess.timeout.Reset(options.ReconnectingProcessTimeout)
+					}
+				}()
+
+				// Remove this connection from the process's connection list once the
+				// connection ends so data is no longer sent to it.
 				defer func() {
-					wsNetConn.Close()
+					wsNetConn.Close() // REVIEW@asher: Not sure if necessary.
 					rprocess.activeConnsMutex.Lock()
 					delete(rprocess.activeConns, connectionID)
-					if len(rprocess.activeConns) == 0 {
-						timeout := time.NewTimer(options.ReconnectingProcessTimeout)
-						timeoutCtx, cancel := context.WithCancel(context.Background())
-						rprocess.timeoutCancel = cancel
-						go func() {
-							defer cancel()
-							// Close if the inactive timeout occurs.
-							select {
-							case <-timeout.C:
-								flog.Info("killing reconnecting process %s due to inactivity", header.ID)
-								rprocess.Close()
-							case <-timeoutCtx.Done():
-							}
-						}()
-					}
 					rprocess.activeConnsMutex.Unlock()
 				}()
 			} else {
@@ -300,11 +327,13 @@ type reconnectingProcess struct {
 	activeConnsMutex sync.Mutex
 	activeConns      map[string]net.Conn
 
-	ringBuffer    *circbuf.Buffer
-	timeoutCancel context.CancelFunc
-	process       Process
+	ringBuffer *circbuf.Buffer
+	timeout    *time.Timer
+	process    Process
 }
 
+// Close ends all connections to the reconnecting process and clears the ring
+// buffer.
 func (r *reconnectingProcess) Close() {
 	r.activeConnsMutex.Lock()
 	defer r.activeConnsMutex.Unlock()
