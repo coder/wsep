@@ -3,6 +3,6 @@ FROM golang:1
 ENV GOFLAGS="-mod=readonly"
 ENV CI=true
 
-RUN go get golang.org/x/tools/cmd/goimports
-RUN go get golang.org/x/lint/golint
-RUN go get github.com/mattn/goveralls
+RUN go install golang.org/x/tools/cmd/goimports@latest
+RUN go install golang.org/x/lint/golint@latest
+RUN go install github.com/mattn/goveralls@latest

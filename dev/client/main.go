@@ -23,35 +23,38 @@ type notty struct {
 }
 
 func (c *notty) Run(fl *pflag.FlagSet) {
-	do(fl, false)
+	do(fl, false, "")
 }
 
 func (c *notty) Spec() cli.CommandSpec {
 	return cli.CommandSpec{
-		Name:    "notty",
-		Usage:   "[flags]",
-		Desc:    `Run a command without tty enabled.`,
-		RawArgs: true,
+		Name:  "notty",
+		Usage: "[flags]",
+		Desc:  `Run a command without tty enabled.`,
 	}
 }
 
 type tty struct {
+	id string
 }
 
 func (c *tty) Run(fl *pflag.FlagSet) {
-	do(fl, true)
+	do(fl, true, c.id)
 }
 
 func (c *tty) Spec() cli.CommandSpec {
 	return cli.CommandSpec{
-		Name:    "tty",
-		Usage:   "[flags]",
-		Desc:    `Run a command with tty enabled.`,
-		RawArgs: true,
+		Name:  "tty",
+		Usage: "[id] [flags]",
+		Desc:  `Run a command with tty enabled.  Use the same ID to reconnect.`,
 	}
 }
 
-func do(fl *pflag.FlagSet, tty bool) {
+func (c *tty) RegisterFlags(fl *pflag.FlagSet) {
+	fl.StringVar(&c.id, "id", "", "sets id for reconnection")
+}
+
+func do(fl *pflag.FlagSet, tty bool, id string) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -71,6 +74,7 @@ func do(fl *pflag.FlagSet, tty bool) {
 		args = fl.Args()[1:]
 	}
 	process, err := executor.Start(ctx, wsep.Command{
+		ID:      id,
 		Command: fl.Arg(0),
 		Args:    args,
 		TTY:     tty,

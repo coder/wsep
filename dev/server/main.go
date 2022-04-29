@@ -23,7 +23,7 @@ func serve(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	err = wsep.Serve(r.Context(), ws, wsep.LocalExecer{})
+	err = wsep.Serve(r.Context(), ws, wsep.LocalExecer{}, nil)
 	if err != nil {
 		flog.Error("failed to serve execer: %v", err)
 		ws.Close(websocket.StatusAbnormalClosure, "failed to serve execer")

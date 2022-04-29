@@ -18,6 +18,7 @@ type ClientResizeHeader struct {
 // ClientStartHeader specifies a request to start command
 type ClientStartHeader struct {
 	Type    string  `json:"type"`
+	ID      string  `json:"id"`
 	Command Command `json:"command"`
 }
 

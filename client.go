@@ -27,6 +27,8 @@ func RemoteExecer(conn *websocket.Conn) Execer {
 
 // Command represents an external command to be run
 type Command struct {
+	// ID allows reconnecting commands that have a TTY.
+	ID         string
 	Command    string
 	Args       []string
 	TTY        bool
@@ -39,6 +41,7 @@ type Command struct {
 
 func (r remoteExec) Start(ctx context.Context, c Command) (Process, error) {
 	header := proto.ClientStartHeader{
+		ID:      c.ID,
 		Command: mapToProtoCmd(c),
 		Type:    proto.TypeStart,
 	}
