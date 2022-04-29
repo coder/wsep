@@ -201,6 +201,9 @@ func Serve(ctx context.Context, c *websocket.Conn, execer Execer, options *Optio
 				go func() {
 					for {
 						select {
+						// Stop looping once this request finishes.
+						case <-ctx.Done():
+							return
 						case <-heartbeat.C:
 						}
 						rprocess.timeout.Reset(options.ReconnectingProcessTimeout)
