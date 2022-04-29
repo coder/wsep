@@ -196,7 +196,7 @@ func Serve(ctx context.Context, c *websocket.Conn, execer Execer, options *Optio
 
 				// Keep resetting the inactivity timer while this connection is alive.
 				rprocess.timeout.Reset(options.ReconnectingProcessTimeout)
-				heartbeat := time.NewTimer(options.ReconnectingProcessTimeout / 2)
+				heartbeat := time.NewTicker(options.ReconnectingProcessTimeout / 2)
 				defer heartbeat.Stop()
 				go func() {
 					for {

@@ -135,7 +135,9 @@ func TestReconnectTTY(t *testing.T) {
 
 	// Test disconnecting while another connection is active.
 	ws2, server2 := mockConn(ctx, t, &Options{
-		ReconnectingProcessTimeout: time.Second,
+		// Divide the time to test that the heartbeat keeps it open through multiple
+		// intervals.
+		ReconnectingProcessTimeout: time.Second / 4,
 	})
 	defer server2.Close()
 
