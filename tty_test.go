@@ -157,6 +157,67 @@ func TestReconnectTTY(t *testing.T) {
 		// This time no echo since it is a new process.
 		assert.True(t, "find echo", !findStdout(t, process, expected))
 	})
+
+	t.Run("AlternateScreen", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		command := Command{
+			ID:      uuid.NewString(),
+			Command: "sh",
+			TTY:     true,
+			Stdin:   true,
+		}
+
+		ws, server := mockConn(ctx, t, &Options{
+			ReconnectingProcessTimeout: time.Second,
+		})
+		defer server.Close()
+
+		process, err := RemoteExecer(ws).Start(ctx, command)
+		assert.Success(t, "attach sh", err)
+
+		// Run an application that enters the alternate screen.
+		_, err = process.Stdin().Write([]byte("./ci/alt.sh\r\n"))
+		assert.Success(t, "write to stdin", err)
+
+		assert.True(t, "find output", findStdout(t, process, []string{"./ci/alt.sh", "ALT SCREEN"}))
+
+		// Reconnect; the application should redraw.
+		ws.Close(websocket.StatusNormalClosure, "disconnected")
+		server.Close()
+
+		ws, server = mockConn(ctx, t, &Options{
+			ReconnectingProcessTimeout: time.Second,
+		})
+		defer server.Close()
+
+		process, err = RemoteExecer(ws).Start(ctx, command)
+		assert.Success(t, "attach sh", err)
+
+		assert.True(t, "find output", findStdout(t, process, []string{"./ci/alt.sh", "ALT SCREEN"}))
+
+		// Exit the application.
+		_, err = process.Stdin().Write([]byte("q"))
+		assert.Success(t, "write to stdin", err)
+
+		// Reconnect; the regular buffer should display but not the application.
+		ws.Close(websocket.StatusNormalClosure, "disconnected")
+		server.Close()
+
+		ws, server = mockConn(ctx, t, &Options{
+			ReconnectingProcessTimeout: time.Second,
+		})
+		defer server.Close()
+
+		process, err = RemoteExecer(ws).Start(ctx, command)
+		assert.Success(t, "attach sh", err)
+
+		assert.True(t, "find output", findStdout(t, process, []string{"./ci/alt.sh"}))
+		assert.True(t, "find output", !findStdout(t, process, []string{"ALT SCREEN"}))
+	})
 }
 
 func findStdout(t *testing.T, process Process, expected []string) bool {
@@ -166,7 +227,7 @@ outer:
 	for _, str := range expected {
 		for scanner.Scan() {
 			line := scanner.Text()
-			t.Logf("bash tty stdout = %s", line)
+			t.Logf("bash tty stdout = %s", strings.ReplaceAll(line, "\x1b", "ESC"))
 			if strings.Contains(line, str) {
 				continue outer
 			}
