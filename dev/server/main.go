@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/http"
+	"time"
 
 	"cdr.dev/wsep"
 	"go.coder.com/flog"
@@ -23,7 +24,9 @@ func serve(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	err = wsep.Serve(r.Context(), ws, wsep.LocalExecer{}, nil)
+	err = wsep.Serve(r.Context(), ws, wsep.LocalExecer{}, &wsep.Options{
+		SessionTimeout: 30 * time.Second,
+	})
 	if err != nil {
 		flog.Error("failed to serve execer: %v", err)
 		ws.Close(websocket.StatusAbnormalClosure, "failed to serve execer")
