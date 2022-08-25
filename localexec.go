@@ -36,8 +36,8 @@ func (l *localProcess) Wait() error {
 }
 
 func (l *localProcess) Close() error {
-	if l.ringBuffer != nil {
-		l.ringBuffer.Reset()
+	if l.terminal != nil {
+		l.terminal.Close()
 	}
 	return l.cmd.Process.Kill()
 }

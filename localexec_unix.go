@@ -12,16 +12,15 @@ import (
 	"os/exec"
 	"syscall"
 
-	"github.com/armon/circbuf"
 	"github.com/creack/pty"
+	"github.com/liamg/darktile/pkg/headless"
 	"golang.org/x/xerrors"
 )
 
 type localProcess struct {
-	// tty may be nil
-	tty        *os.File
-	cmd        *exec.Cmd
-	ringBuffer *circbuf.Buffer
+	// terminal may be nil
+	terminal *headless.Terminal
+	cmd      *exec.Cmd
 
 	stdin  io.WriteCloser
 	stdout io.Reader
@@ -29,20 +28,17 @@ type localProcess struct {
 }
 
 func (l *localProcess) Replay() string {
-	if l.ringBuffer == nil {
+	if l.terminal == nil {
 		return ""
 	}
-	return string(l.ringBuffer.Bytes())
+	return l.terminal.Serialize()
 }
 
 func (l *localProcess) Resize(_ context.Context, rows, cols uint16) error {
-	if l.tty == nil && rows != 0 && cols != 0 {
+	if l.terminal == nil && rows != 0 && cols != 0 {
 		return nil
 	}
-	return pty.Setsize(l.tty, &pty.Winsize{
-		Rows: rows,
-		Cols: cols,
-	})
+	return l.terminal.SetSize(rows, cols)
 }
 
 // Start executes the given command locally
@@ -70,25 +66,23 @@ func (l LocalExecer) Start(ctx context.Context, c Command) (Process, error) {
 	if c.TTY {
 		// This special WSEP_TTY variable helps debug unexpected TTYs.
 		process.cmd.Env = append(process.cmd.Env, "WSEP_TTY=true")
-		process.tty, err = pty.Start(process.cmd)
+		tty, err := pty.Start(process.cmd)
 		if err != nil {
 			return nil, xerrors.Errorf("start command with pty: %w", err)
 		}
 
 		// Scrollback is only necessary if there is an ID for reconnection.
 		if c.ID != "" {
-			// Default to buffer 64KB.
-			process.ringBuffer, err = circbuf.NewBuffer(64 * 1024)
-			if err != nil {
-				return nil, xerrors.Errorf("unable to create ring buffer %w", err)
-			}
-			process.stdout = io.TeeReader(process.tty, process.ringBuffer)
+			// Start a terminal for parsing scrollback.
+			process.terminal = headless.New()
+			process.terminal.Run()
+			process.stdout = io.TeeReader(tty, process.terminal)
 		} else {
-			process.stdout = process.tty
+			process.stdout = tty
 		}
 
 		process.stderr = ioutil.NopCloser(bytes.NewReader(nil))
-		process.stdin = process.tty
+		process.stdin = tty
 	} else {
 		if c.Stdin {
 			process.stdin, err = process.cmd.StdinPipe()
