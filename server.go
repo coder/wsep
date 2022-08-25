@@ -10,7 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/armon/circbuf"
 	"github.com/google/uuid"
 
 	"go.coder.com/flog"
@@ -85,7 +84,7 @@ func Serve(ctx context.Context, c *websocket.Conn, execer Execer, options *Optio
 				return xerrors.Errorf("unmarshal start header: %w", err)
 			}
 
-			command := mapToClientCmd(header.Command)
+			command := mapToClientCmd(header)
 
 			// Only allow TTYs with IDs to be reconnected.
 			if command.TTY && header.ID != "" {
@@ -118,19 +117,11 @@ func Serve(ctx context.Context, c *websocket.Conn, execer Execer, options *Optio
 						return err
 					}
 
-					// Default to buffer 64KB.
-					ringBuffer, err := circbuf.NewBuffer(64 * 1024)
-					if err != nil {
-						cancel()
-						return xerrors.Errorf("unable to create ring buffer %w", err)
-					}
-
 					rprocess = &reconnectingProcess{
 						activeConns: make(map[string]net.Conn),
 						process:     process,
 						// Timeouts created with AfterFunc can be reset.
-						timeout:    time.AfterFunc(options.ReconnectingProcessTimeout, cancel),
-						ringBuffer: ringBuffer,
+						timeout: time.AfterFunc(options.ReconnectingProcessTimeout, cancel),
 					}
 					reconnectingProcesses.Store(header.ID, rprocess)
 
@@ -151,7 +142,7 @@ func Serve(ctx context.Context, c *websocket.Conn, execer Execer, options *Optio
 						reconnectingProcesses.Delete(header.ID)
 					}()
 
-					// Write to the ring buffer and all connections as we receive stdout.
+					// Write to all connections as we receive stdout.
 					go func() {
 						buffer := make([]byte, 32*1024)
 						for {
@@ -161,12 +152,6 @@ func Serve(ctx context.Context, c *websocket.Conn, execer Execer, options *Optio
 								break
 							}
 							part := buffer[:read]
-							_, err = rprocess.ringBuffer.Write(part)
-							if err != nil {
-								flog.Error("reconnecting process %s write buffer: %v", header.ID, err)
-								cancel()
-								break
-							}
 							rprocess.activeConnsMutex.Lock()
 							for _, conn := range rprocess.activeConns {
 								_ = sendOutput(ctx, part, conn)
@@ -176,15 +161,24 @@ func Serve(ctx context.Context, c *websocket.Conn, execer Execer, options *Optio
 					}()
 				}
 
+				// Resize if needed.
+				err = process.Resize(ctx, header.Rows, header.Cols)
+				if err != nil {
+					return xerrors.Errorf("resize %s: %w", header.ID, err)
+				}
+
 				err = sendPID(ctx, process.Pid(), wsNetConn)
 				if err != nil {
 					flog.Error("failed to send pid %d", process.Pid())
 				}
 
-				// Write out the initial contents in the ring buffer.
-				err = sendOutput(ctx, rprocess.ringBuffer.Bytes(), wsNetConn)
-				if err != nil {
-					return xerrors.Errorf("write reconnecting process %s buffer: %w", header.ID, err)
+				// Once we hit the local process grab the replay and send it via stdout.
+				lprocess, ok := process.(*localProcess)
+				if ok {
+					err = sendOutput(ctx, []byte(lprocess.Replay()), wsNetConn)
+					if err != nil {
+						return xerrors.Errorf("failed to replay %s: %w", header.ID, err)
+					}
 				}
 
 				// Store this connection on the reconnecting process.  All connections
@@ -330,13 +324,11 @@ type reconnectingProcess struct {
 	activeConnsMutex sync.Mutex
 	activeConns      map[string]net.Conn
 
-	ringBuffer *circbuf.Buffer
-	timeout    *time.Timer
-	process    Process
+	timeout *time.Timer
+	process Process
 }
 
-// Close ends all connections to the reconnecting process and clears the ring
-// buffer.
+// Close ends all connections to the reconnecting process.
 func (r *reconnectingProcess) Close() {
 	r.activeConnsMutex.Lock()
 	defer r.activeConnsMutex.Unlock()
@@ -344,5 +336,4 @@ func (r *reconnectingProcess) Close() {
 		_ = conn.Close()
 	}
 	_ = r.process.Close()
-	r.ringBuffer.Reset()
 }

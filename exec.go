@@ -56,15 +56,16 @@ func mapToProtoCmd(c Command) proto.Command {
 	}
 }
 
-func mapToClientCmd(c proto.Command) Command {
+func mapToClientCmd(c proto.ClientStartHeader) Command {
 	return Command{
-		Command:    c.Command,
-		Args:       c.Args,
-		Stdin:      c.Stdin,
-		TTY:        c.TTY,
-		UID:        c.UID,
-		GID:        c.GID,
-		Env:        c.Env,
-		WorkingDir: c.WorkingDir,
+		ID:         c.ID,
+		Command:    c.Command.Command,
+		Args:       c.Command.Args,
+		Stdin:      c.Command.Stdin,
+		TTY:        c.Command.TTY,
+		UID:        c.Command.UID,
+		GID:        c.Command.GID,
+		Env:        c.Command.Env,
+		WorkingDir: c.Command.WorkingDir,
 	}
 }

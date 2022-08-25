@@ -21,6 +21,10 @@ type localProcess struct {
 	stderr io.Reader
 }
 
+func (l *localProcess) Replay() error {
+	return xerrors.Errorf("Windows local execution is not supported")
+}
+
 func (l *localProcess) Resize(_ context.Context, rows, cols uint16) error {
 	return xerrors.Errorf("Windows local execution is not supported")
 }

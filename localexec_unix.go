@@ -12,18 +12,27 @@ import (
 	"os/exec"
 	"syscall"
 
+	"github.com/armon/circbuf"
 	"github.com/creack/pty"
 	"golang.org/x/xerrors"
 )
 
 type localProcess struct {
 	// tty may be nil
-	tty *os.File
-	cmd *exec.Cmd
+	tty        *os.File
+	cmd        *exec.Cmd
+	ringBuffer *circbuf.Buffer
 
 	stdin  io.WriteCloser
 	stdout io.Reader
 	stderr io.Reader
+}
+
+func (l *localProcess) Replay() string {
+	if l.ringBuffer == nil {
+		return ""
+	}
+	return string(l.ringBuffer.Bytes())
 }
 
 func (l *localProcess) Resize(_ context.Context, rows, cols uint16) error {
@@ -65,7 +74,19 @@ func (l LocalExecer) Start(ctx context.Context, c Command) (Process, error) {
 		if err != nil {
 			return nil, xerrors.Errorf("start command with pty: %w", err)
 		}
-		process.stdout = process.tty
+
+		// Scrollback is only necessary if there is an ID for reconnection.
+		if c.ID != "" {
+			// Default to buffer 64KB.
+			process.ringBuffer, err = circbuf.NewBuffer(64 * 1024)
+			if err != nil {
+				return nil, xerrors.Errorf("unable to create ring buffer %w", err)
+			}
+			process.stdout = io.TeeReader(process.tty, process.ringBuffer)
+		} else {
+			process.stdout = process.tty
+		}
+
 		process.stderr = ioutil.NopCloser(bytes.NewReader(nil))
 		process.stdin = process.tty
 	} else {
