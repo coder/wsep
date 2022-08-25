@@ -80,6 +80,14 @@ func Serve(ctx context.Context, c *websocket.Conn, execer Execer, options *Optio
 			}
 
 			command := mapToClientCmd(header.Command)
+
+			if command.TTY {
+				// Enforce rows and columns so the TTY will be correctly sized.
+				if command.Rows == 0 || command.Cols == 0 {
+					return xerrors.Errorf("rows and cols must be non-zero: %w", err)
+				}
+			}
+
 			process, err = execer.Start(ctx, command)
 			if err != nil {
 				return err

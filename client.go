@@ -28,10 +28,13 @@ func RemoteExecer(conn *websocket.Conn) Execer {
 // Command represents an external command to be run
 type Command struct {
 	// ID allows reconnecting commands that have a TTY.
-	ID         string
-	Command    string
-	Args       []string
+	ID      string
+	Command string
+	Args    []string
+	// Commands with a TTY also require Rows and Cols.
 	TTY        bool
+	Rows       uint16
+	Cols       uint16
 	Stdin      bool
 	UID        uint32
 	GID        uint32

@@ -33,6 +33,8 @@ func testTTY(ctx context.Context, t *testing.T, e Execer) {
 		Command: "sh",
 		TTY:     true,
 		Stdin:   true,
+		Cols:    100,
+		Rows:    100,
 	})
 	assert.Success(t, "start sh", err)
 	var wg sync.WaitGroup
@@ -77,6 +79,8 @@ func TestReconnectTTY(t *testing.T) {
 			Command: "sh",
 			TTY:     true,
 			Stdin:   true,
+			Cols:    100,
+			Rows:    100,
 		}
 
 		ws, server := mockConn(ctx, t, &Options{
@@ -182,6 +186,8 @@ func TestReconnectTTY(t *testing.T) {
 			Command: "sh",
 			TTY:     true,
 			Stdin:   true,
+			Cols:    100,
+			Rows:    100,
 		}
 
 		ws, server := mockConn(ctx, t, &Options{
