@@ -59,6 +59,8 @@ func mapToProtoCmd(c Command) proto.Command {
 func mapToClientCmd(c proto.ClientStartHeader) Command {
 	return Command{
 		ID:         c.ID,
+		Rows:       c.Rows,
+		Cols:       c.Cols,
 		Command:    c.Command.Command,
 		Args:       c.Command.Args,
 		Stdin:      c.Command.Stdin,

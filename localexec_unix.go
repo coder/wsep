@@ -36,7 +36,7 @@ func (l *localProcess) Replay() string {
 }
 
 func (l *localProcess) Resize(_ context.Context, rows, cols uint16) error {
-	if l.tty == nil {
+	if l.tty == nil && rows != 0 && cols != 0 {
 		return nil
 	}
 	return pty.Setsize(l.tty, &pty.Winsize{

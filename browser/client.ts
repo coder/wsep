@@ -14,7 +14,7 @@ export interface Command {
 }
 
 export type ClientHeader =
-  | { type: 'start'; command: Command }
+  | { type: 'start'; id: string; command: Command; cols: number; rows: number; }
   | { type: 'stdin' }
   | { type: 'close_stdin' }
   | { type: 'resize'; cols: number; rows: number };
@@ -42,8 +42,14 @@ export const closeStdin = (ws: WebSocket) => {
   ws.send(msg.buffer);
 };
 
-export const startCommand = (ws: WebSocket, command: Command) => {
-  const msg = joinMessage({ type: 'start', command: command });
+export const startCommand = (
+  ws: WebSocket,
+  command: Command,
+  id: string,
+  rows: number,
+  cols: number
+) => {
+  const msg = joinMessage({ type: 'start', command, id, rows, cols });
   ws.send(msg.buffer);
 };
 

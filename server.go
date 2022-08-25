@@ -94,6 +94,12 @@ func Serve(ctx context.Context, c *websocket.Conn, execer Execer, options *Optio
 					flog.Error("%s is not a valid uuid: %w", header.ID, err)
 				}
 
+				// Enforce rows and columns.  Without these we cannot properly render
+				// the terminal state for scrollback.
+				if header.Rows == 0 || header.Cols == 0 {
+					return xerrors.Errorf("rows and cols must be non-zero: %w", err)
+				}
+
 				// Get an existing process or create a new one.
 				var rprocess *reconnectingProcess
 				rawRProcess, ok := reconnectingProcesses.Load(header.ID)

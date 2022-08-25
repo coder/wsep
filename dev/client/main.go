@@ -81,12 +81,18 @@ func do(fl *pflag.FlagSet, tty bool, id string, timeout time.Duration) {
 	if len(fl.Args()) > 1 {
 		args = fl.Args()[1:]
 	}
+	width, height, err := term.GetSize(int(os.Stdin.Fd()))
+	if err != nil {
+		flog.Fatal("unable to get term size")
+	}
 	process, err := executor.Start(ctx, wsep.Command{
 		ID:      id,
 		Command: fl.Arg(0),
 		Args:    args,
 		TTY:     tty,
 		Stdin:   true,
+		Rows:    uint16(height),
+		Cols:    uint16(width),
 	})
 	if err != nil {
 		flog.Fatal("failed to start remote command: %v", err)

@@ -20,6 +20,8 @@ type ClientStartHeader struct {
 	Type    string  `json:"type"`
 	ID      string  `json:"id"`
 	Command Command `json:"command"`
+	Rows    uint16  `json:"rows"`
+	Cols    uint16  `json:"cols"`
 }
 
 // Command represents a runnable command.
