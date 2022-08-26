@@ -93,7 +93,7 @@ func TestReconnectTTY(t *testing.T) {
 
 		// Write some unique output.
 		echoCmd := "echo test:$((1+1))"
-		_, err = process.Stdin().Write([]byte(echoCmd + "\r\n"))
+		_, err = process.Stdin().Write([]byte(echoCmd + "\n"))
 		assert.Success(t, "write to stdin", err)
 		expected := []string{echoCmd, "test:2"}
 
@@ -116,7 +116,7 @@ func TestReconnectTTY(t *testing.T) {
 		time.Sleep(time.Second)
 
 		echoCmd = "echo test:$((2+2))"
-		_, err = process.Stdin().Write([]byte(echoCmd + "\r\n"))
+		_, err = process.Stdin().Write([]byte(echoCmd + "\n"))
 		assert.Success(t, "write to stdin", err)
 		expected = append(expected, echoCmd, "test:4")
 
@@ -143,7 +143,7 @@ func TestReconnectTTY(t *testing.T) {
 
 		// This connection should still be up.
 		echoCmd = "echo test:$((3+3))"
-		_, err = process.Stdin().Write([]byte(echoCmd + "\r\n"))
+		_, err = process.Stdin().Write([]byte(echoCmd + "\n"))
 		assert.Success(t, "write to stdin", err)
 		expected = append(expected, echoCmd, "test:6")
 
@@ -199,7 +199,7 @@ func TestReconnectTTY(t *testing.T) {
 		assert.Success(t, "attach sh", err)
 
 		// Run an application that enters the alternate screen.
-		_, err = process.Stdin().Write([]byte("./ci/alt.sh\r\n"))
+		_, err = process.Stdin().Write([]byte("./ci/alt.sh\n"))
 		assert.Success(t, "write to stdin", err)
 
 		assert.True(t, "find output", checkStdout(t, process, []string{"./ci/alt.sh", "ALT SCREEN"}, []string{}))
