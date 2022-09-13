@@ -80,7 +80,7 @@ func TestReconnectTTY(t *testing.T) {
 		}
 
 		ws, server := mockConn(ctx, t, &Options{
-			ReconnectingProcessTimeout: time.Second,
+			SessionTimeout: time.Second,
 		})
 		defer server.Close()
 
@@ -100,7 +100,7 @@ func TestReconnectTTY(t *testing.T) {
 		server.Close()
 
 		ws, server = mockConn(ctx, t, &Options{
-			ReconnectingProcessTimeout: time.Second,
+			SessionTimeout: time.Second,
 		})
 		defer server.Close()
 
@@ -121,7 +121,7 @@ func TestReconnectTTY(t *testing.T) {
 		ws2, server2 := mockConn(ctx, t, &Options{
 			// Divide the time to test that the heartbeat keeps it open through multiple
 			// intervals.
-			ReconnectingProcessTimeout: time.Second / 4,
+			SessionTimeout: time.Second / 4,
 		})
 		defer server2.Close()
 
@@ -147,7 +147,7 @@ func TestReconnectTTY(t *testing.T) {
 
 		// The next connection should start a new process.
 		ws, server = mockConn(ctx, t, &Options{
-			ReconnectingProcessTimeout: time.Second,
+			SessionTimeout: time.Second,
 		})
 		defer server.Close()
 
