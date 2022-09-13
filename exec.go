@@ -38,8 +38,8 @@ type Process interface {
 	Resize(ctx context.Context, rows, cols uint16) error
 	// Wait returns ExitError when the command terminates with a non-zero exit code.
 	Wait() error
-	// Close terminates the process and underlying connection(s).
-	// It must be called otherwise a connection or process may leak.
+	// Close sends a SIGTERM to the process.  To force a shutdown cancel the
+	// context passed into the execer.
 	Close() error
 }
 
@@ -64,8 +64,8 @@ func mapToProtoCmd(c Command) proto.Command {
 	}
 }
 
-func mapToClientCmd(c proto.Command) Command {
-	return Command{
+func mapToClientCmd(c proto.Command) *Command {
+	return &Command{
 		Command:    c.Command,
 		Args:       c.Args,
 		Stdin:      c.Stdin,

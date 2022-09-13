@@ -35,6 +35,7 @@ func testTTY(ctx context.Context, t *testing.T, e Execer) {
 		Stdin:   true,
 		Cols:    100,
 		Rows:    100,
+		Env:     []string{"TERM=xterm"},
 	})
 	assert.Success(t, "start sh", err)
 	var wg sync.WaitGroup
@@ -66,9 +67,54 @@ func testTTY(ctx context.Context, t *testing.T, e Execer) {
 }
 
 func TestReconnectTTY(t *testing.T) {
-	t.Parallel()
+	t.Run("NoScreen", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
 
-	t.Run("RegularScreen", func(t *testing.T) {
+		t.Setenv("PATH", "/bin")
+
+		command := Command{
+			ID:      uuid.NewString(),
+			Command: "sh",
+			TTY:     true,
+			Stdin:   true,
+			Cols:    100,
+			Rows:    100,
+			Env:     []string{"TERM=xterm"},
+		}
+
+		ws, server := mockConn(ctx, t, nil)
+		defer server.Close()
+
+		process, err := RemoteExecer(ws).Start(ctx, command)
+		assert.Success(t, "start sh", err)
+
+		// Write some unique output.
+		echoCmd := "echo test:$((5+5))"
+		_, err = process.Stdin().Write([]byte(echoCmd + "\n"))
+		assert.Success(t, "write to stdin", err)
+		expected := []string{echoCmd, "test:10"}
+
+		assert.True(t, "find echo", checkStdout(t, process, expected, []string{}))
+
+		// Connect to the same session.
+		ws, server = mockConn(ctx, t, nil)
+		defer server.Close()
+
+		process, err = RemoteExecer(ws).Start(ctx, command)
+		assert.Success(t, "attach sh", err)
+
+		echoCmd = "echo test:$((6+6))"
+		_, err = process.Stdin().Write([]byte(echoCmd + "\r\n"))
+		assert.Success(t, "write to stdin", err)
+		unexpected := expected
+		expected = []string{"test:12"}
+
+		// No echo since it is a new process.
+		assert.True(t, "find echo", checkStdout(t, process, expected, unexpected))
+	})
+
+	t.Run("Regular", func(t *testing.T) {
 		t.Parallel()
 
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -81,7 +127,12 @@ func TestReconnectTTY(t *testing.T) {
 			Stdin:   true,
 			Cols:    100,
 			Rows:    100,
+			Env:     []string{"TERM=xterm"},
 		}
+
+		t.Cleanup(func() {
+			Dispose(command.ID)
+		})
 
 		ws, server := mockConn(ctx, t, &Options{
 			SessionTimeout: time.Second,
@@ -175,7 +226,7 @@ func TestReconnectTTY(t *testing.T) {
 		assert.True(t, "find echo", checkStdout(t, process, expected, unexpected))
 	})
 
-	t.Run("AlternateScreen", func(t *testing.T) {
+	t.Run("Alternate", func(t *testing.T) {
 		t.Parallel()
 
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -188,7 +239,12 @@ func TestReconnectTTY(t *testing.T) {
 			Stdin:   true,
 			Cols:    100,
 			Rows:    100,
+			Env:     []string{"TERM=xterm"},
 		}
+
+		t.Cleanup(func() {
+			Dispose(command.ID)
+		})
 
 		ws, server := mockConn(ctx, t, &Options{
 			SessionTimeout: time.Second,

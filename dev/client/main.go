@@ -93,6 +93,7 @@ func do(fl *pflag.FlagSet, tty bool, id string, timeout time.Duration) {
 		Stdin:   true,
 		Rows:    uint16(height),
 		Cols:    uint16(width),
+		Env:     []string{"TERM=" + os.Getenv("TERM")},
 	})
 	if err != nil {
 		flog.Fatal("failed to start remote command: %v", err)
