@@ -107,9 +107,10 @@ func testExecerFail(ctx context.Context, t *testing.T, execer Execer) {
 	go io.Copy(ioutil.Discard, process.Stdout())
 
 	err = process.Wait()
-	code, ok := err.(ExitError)
+	exitErr, ok := err.(ExitError)
 	assert.True(t, "is exit error", ok)
-	assert.True(t, "exit code is nonzero", code.Code != 0)
+	assert.True(t, "exit code is nonzero", exitErr.ExitCode() != 0)
+	assert.Equal(t, "exit error", exitErr.Error(), "exit status 2")
 	assert.Error(t, "wait for process to error", err)
 }
 

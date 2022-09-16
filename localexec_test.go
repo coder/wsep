@@ -72,7 +72,8 @@ func TestExitCode(t *testing.T) {
 	err = process.Wait()
 	exitErr, ok := err.(ExitError)
 	assert.True(t, "error is ExitError", ok)
-	assert.Equal(t, "exit error", exitErr.Code, 127)
+	assert.Equal(t, "exit error code", exitErr.ExitCode(), 127)
+	assert.Equal(t, "exit error", exitErr.Error(), "exit status 127")
 }
 
 func TestStdin(t *testing.T) {

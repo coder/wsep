@@ -110,12 +110,8 @@ func Serve(ctx context.Context, c *websocket.Conn, execer Execer, options *Optio
 			go func() {
 				defer wsNetConn.Close()
 				_ = outputgroup.Wait()
-				err = process.Wait()
-				if exitErr, ok := err.(ExitError); ok {
-					_ = sendExitCode(ctx, exitErr.Code, wsNetConn)
-					return
-				}
-				_ = sendExitCode(ctx, 0, wsNetConn)
+				err := process.Wait()
+				_ = sendExitCode(ctx, err, wsNetConn)
 			}()
 
 		case proto.TypeResize:
@@ -149,10 +145,19 @@ func Serve(ctx context.Context, c *websocket.Conn, execer Execer, options *Optio
 	}
 }
 
-func sendExitCode(_ context.Context, exitCode int, conn net.Conn) error {
+func sendExitCode(_ context.Context, err error, conn net.Conn) error {
+	exitCode := 0
+	errorStr := ""
+	if err != nil {
+		errorStr = err.Error()
+	}
+	if exitErr, ok := err.(ExitError); ok {
+		exitCode = exitErr.ExitCode()
+	}
 	header, err := json.Marshal(proto.ServerExitCodeHeader{
 		Type:     proto.TypeExitCode,
 		ExitCode: exitCode,
+		Error:    errorStr,
 	})
 	if err != nil {
 		return err

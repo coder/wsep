@@ -162,7 +162,7 @@ func (r remoteProcess) listen(ctx context.Context) {
 	defer r.conn.Close(websocket.StatusNormalClosure, "normal closure")
 	defer close(r.done)
 
-	exitCode := make(chan int, 1)
+	exitMsg := make(chan proto.ServerExitCodeHeader, 1)
 	var eg errgroup.Group
 
 	eg.Go(func() error {
@@ -195,13 +195,13 @@ func (r remoteProcess) listen(ctx context.Context) {
 					return err
 				}
 			case proto.TypeExitCode:
-				var exitMsg proto.ServerExitCodeHeader
-				err = json.Unmarshal(headerByt, &exitMsg)
+				var msg proto.ServerExitCodeHeader
+				err = json.Unmarshal(headerByt, &msg)
 				if err != nil {
 					continue
 				}
 
-				exitCode <- exitMsg.ExitCode
+				exitMsg <- msg
 				return nil
 			}
 		}
@@ -210,9 +210,9 @@ func (r remoteProcess) listen(ctx context.Context) {
 
 	err := eg.Wait()
 	select {
-	case exitCode := <-exitCode:
-		if exitCode != 0 {
-			r.done <- ExitError{Code: exitCode}
+	case exitMsg := <-exitMsg:
+		if exitMsg.ExitCode != 0 {
+			r.done <- ExitError{code: exitMsg.ExitCode, error: exitMsg.Error}
 		}
 	default:
 		r.done <- err

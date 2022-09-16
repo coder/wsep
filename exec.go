@@ -2,7 +2,6 @@ package wsep
 
 import (
 	"context"
-	"fmt"
 	"io"
 
 	"cdr.dev/wsep/internal/proto"
@@ -10,11 +9,18 @@ import (
 
 // ExitError is sent when the command terminates.
 type ExitError struct {
-	Code int
+	code  int
+	error string
 }
 
+// ExitCode returns the exit code of the process.
+func (e ExitError) ExitCode() int {
+	return e.code
+}
+
+// Error returns a string describing why the process errored.
 func (e ExitError) Error() string {
-	return fmt.Sprintf("process exited with code %v", e.Code)
+	return e.error
 }
 
 // Process represents a started command.
