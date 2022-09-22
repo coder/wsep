@@ -304,6 +304,12 @@ func createSession(ctx context.Context, id string, command *Command, execer Exec
 			return nil, err
 		}
 
+		// screenID will be used to attach to the session that was just created.
+		// Screen allows attaching to a session via either the session name or
+		// <pid>.<session-name>.  Use the latter form to differentiate between
+		// sessions with the same name (for example if a session closes due to a
+		// timeout and a client reconnects around the same time there can be two
+		// sessions with the same name while the old session cleans up).
 		sess.screenID = fmt.Sprintf("%d.%s", process.Pid(), id)
 
 		// Timeouts created with AfterFunc can be reset.
