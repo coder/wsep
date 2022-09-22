@@ -1,11 +1,8 @@
 # wsep
 
-`wsep` is a high performance,
-<strong style="font-size: 1.5em; text-decoration: underline;">w</strong>eb <strong style="font-size: 1.5em;text-decoration: underline;">s</strong>ocket command <strong style="font-size: 1.5em;text-decoration: underline;">e</strong>xecution <strong style="font-size: 1.5em;text-decoration: underline;">p</strong>rotocol. It can be thought of as SSH without encryption.
+`wsep` is a high performance command execution protocol over WebSocket. It can be thought of as SSH over WebSockets without encryption.
 
-It's useful in cases where you want to provide a command exec interface into a remote environment. It's implemented
-with WebSocket so it may be used directly by a browser frontend. Its symmetric design satisfies
-`wsep.Execer` for local and remote execution.
+The package offers the `wsep.Execer` interface so that local, SSH, and WebSocket execution can be interchanged. This is particular useful when testing.
 
 ## Examples
 
@@ -58,7 +55,7 @@ go run ./dev/client tty --id 1 -- bash
 go run ./dev/client notty -- ls -la
 ```
 
-### Local performance cost
+### Benchmarks
 
 Local `sh` through a local `wsep` connection
 
