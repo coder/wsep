@@ -131,6 +131,33 @@ func TestReconnectTTY(t *testing.T) {
 		expected := writeUnique(t, process)
 		assert.True(t, "find shell output", checkStdout(t, process, expected, []string{}))
 	})
+
+	t.Run("Simultaneous", func(t *testing.T) {
+		t.Parallel()
+
+		server := newServer(t)
+
+		// Try connecting a bunch of sessions at once.
+		var wg sync.WaitGroup
+		for i := 0; i < 100; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				ctx, command := newSession(t)
+				process, disconnect := connect(ctx, t, command, server, nil)
+				expected := writeUnique(t, process)
+				assert.True(t, "find initial output", checkStdout(t, process, expected, []string{}))
+
+				n := rand.Intn(1000)
+				time.Sleep(time.Duration(n) * time.Millisecond)
+				disconnect()
+				process, disconnect = connect(ctx, t, command, server, nil)
+				expected = append(expected, writeUnique(t, process)...)
+				assert.True(t, "find reconnected output", checkStdout(t, process, expected, []string{}))
+			}()
+		}
+		wg.Wait()
+	})
 }
 
 // newServer returns a new wsep server.
@@ -168,7 +195,10 @@ func connect(ctx context.Context, t *testing.T, command Command, wsepServer *Ser
 		options = &Options{SessionTimeout: time.Second}
 	}
 	ws, server := mockConn(ctx, t, wsepServer, options)
-	t.Cleanup(server.Close)
+	t.Cleanup(func() {
+		ws.Close(websocket.StatusNormalClosure, "disconnected")
+		server.Close()
+	})
 
 	process, err := RemoteExecer(ws).Start(ctx, command)
 	assert.Success(t, "start sh", err)
@@ -182,7 +212,7 @@ func connect(ctx context.Context, t *testing.T, command Command, wsepServer *Ser
 // writeUnique writes some unique output to the shell process and returns the
 // expected output.
 func writeUnique(t *testing.T, process Process) []string {
-	n := rand.Intn(100)
+	n := rand.Intn(1000000)
 	echoCmd := fmt.Sprintf("echo test:$((%d+%d))", n, n)
 	write(t, process, echoCmd)
 	return []string{echoCmd, fmt.Sprintf("test:%d", n+n)}
@@ -206,10 +236,12 @@ func checkStdout(t *testing.T, process Process, expected, unexpected []string) b
 		t.Logf("bash tty stdout = %s", strings.ReplaceAll(line, "\x1b", "ESC"))
 		for _, str := range unexpected {
 			if strings.Contains(line, str) {
+				t.Logf("contains unexpected line %s", line)
 				return false
 			}
 		}
 		if strings.Contains(line, expected[i]) {
+			t.Logf("contains expected line %s", line)
 			i = i + 1
 		}
 		if i == len(expected) {
