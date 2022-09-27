@@ -76,7 +76,9 @@ func (srv *Server) Close() {
 }
 
 // Serve runs the server-side of wsep.  The execer may be another wsep
-// connection for chaining.  Use LocalExecer for local command execution.
+// connection for chaining.  Use LocalExecer for local command execution.  The
+// web socket will not be closed automatically; the caller must call Close() on
+// the web socket (ideally with a reason) once Serve yields.
 func (srv *Server) Serve(ctx context.Context, c *websocket.Conn, execer Execer, options *Options) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -94,7 +96,7 @@ func (srv *Server) Serve(ctx context.Context, c *websocket.Conn, execer Execer, 
 		process   Process
 		wsNetConn = websocket.NetConn(ctx, c, websocket.MessageBinary)
 	)
-	defer wsNetConn.Close()
+
 	for {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -137,7 +139,7 @@ func (srv *Server) Serve(ctx context.Context, c *websocket.Conn, execer Execer, 
 			if command.TTY {
 				// Enforce rows and columns so the TTY will be correctly sized.
 				if command.Rows == 0 || command.Cols == 0 {
-					return xerrors.Errorf("rows and cols must be non-zero: %w", err)
+					return xerrors.Errorf("rows and cols must be non-zero")
 				}
 			}
 

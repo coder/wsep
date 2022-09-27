@@ -62,8 +62,7 @@ func mockConn(ctx context.Context, t *testing.T, wsepServer *Server, options *Op
 			err = Serve(r.Context(), ws, LocalExecer{}, options)
 		}
 		if err != nil {
-			t.Errorf("failed to serve execer: %v", err)
-			ws.Close(websocket.StatusAbnormalClosure, "failed to serve execer")
+			ws.Close(websocket.StatusInternalError, err.Error())
 			return
 		}
 		ws.Close(websocket.StatusNormalClosure, "normal closure")
