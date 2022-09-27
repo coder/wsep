@@ -19,27 +19,65 @@ import (
 	"cdr.dev/wsep/internal/proto"
 )
 
-var sessions sync.Map
-var sessionsMutex sync.Mutex
-
 // Options allows configuring the server.
 type Options struct {
 	SessionTimeout time.Duration
 }
 
-// Dispose closes the specified session.
-func Dispose(id string) {
-	if rawSession, ok := sessions.Load(id); ok {
-		if s, ok := rawSession.(*Session); ok {
-			s.Close()
-		}
+// _sessions is a global map of sessions that exists for backwards
+// compatibility.  Server should be used instead which locally maintains the
+// map.
+var _sessions sync.Map
+
+// _sessionsMutex is a global mutex that exists for backwards compatibility.
+// Server should be used instead which locally maintains the mutex.
+var _sessionsMutex sync.Mutex
+
+// Serve runs the server-side of wsep.
+// Deprecated: Use Server.Serve() instead.
+func Serve(ctx context.Context, c *websocket.Conn, execer Execer, options *Options) error {
+	srv := Server{sessions: &_sessions, sessionsMutex: &_sessionsMutex}
+	return srv.Serve(ctx, c, execer, options)
+}
+
+// Server runs the server-side of wsep.  The execer may be another wsep
+// connection for chaining.  Use LocalExecer for local command execution.
+type Server struct {
+	sessions      *sync.Map
+	sessionsMutex *sync.Mutex
+}
+
+// NewServer returns as new wsep server.
+func NewServer() *Server {
+	return &Server{
+		sessions:      &sync.Map{},
+		sessionsMutex: &sync.Mutex{},
 	}
 }
 
-// Serve runs the server-side of wsep.
-// The execer may be another wsep connection for chaining.
-// Use LocalExecer for local command execution.
-func Serve(ctx context.Context, c *websocket.Conn, execer Execer, options *Options) error {
+// SessionCount returns the number of sessions.
+func (srv *Server) SessionCount() int {
+	var i int
+	srv.sessions.Range(func(k, rawSession interface{}) bool {
+		i++
+		return true
+	})
+	return i
+}
+
+// Close closes all sessions.
+func (srv *Server) Close() {
+	srv.sessions.Range(func(k, rawSession interface{}) bool {
+		if s, ok := rawSession.(*Session); ok {
+			s.Close()
+		}
+		return true
+	})
+}
+
+// Serve runs the server-side of wsep.  The execer may be another wsep
+// connection for chaining.  Use LocalExecer for local command execution.
+func (srv *Server) Serve(ctx context.Context, c *websocket.Conn, execer Execer, options *Options) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -105,7 +143,7 @@ func Serve(ctx context.Context, c *websocket.Conn, execer Execer, options *Optio
 
 			// Only TTYs with IDs can be reconnected.
 			if command.TTY && header.ID != "" {
-				command, err = withSession(ctx, header.ID, command, execer, options)
+				command, err = srv.withSession(ctx, header.ID, command, execer, options)
 				if err != nil {
 					return err
 				}
@@ -169,6 +207,34 @@ func Serve(ctx context.Context, c *websocket.Conn, execer Execer, options *Optio
 	}
 }
 
+// withSession wraps the command in a session if screen is available.
+func (srv *Server) withSession(ctx context.Context, id string, command *Command, execer Execer, options *Options) (*Command, error) {
+	// If screen is not installed spawn the command normally.
+	_, err := exec.LookPath("screen")
+	if err != nil {
+		flog.Info("`screen` could not be found; session %s will not persist", id)
+		return command, nil
+	}
+
+	var s *Session
+	srv.sessionsMutex.Lock()
+	if rawSession, ok := srv.sessions.Load(id); ok {
+		if s, ok = rawSession.(*Session); !ok {
+			return nil, xerrors.Errorf("found invalid type in session map for ID %s", id)
+		}
+	} else {
+		s = NewSession(id, command, execer, options)
+		srv.sessions.Store(id, s)
+		go func() { // Remove the session from the map once it closes.
+			defer srv.sessions.Delete(id)
+			s.Wait()
+		}()
+	}
+	srv.sessionsMutex.Unlock()
+
+	return s.Attach(ctx)
+}
+
 func sendExitCode(_ context.Context, err error, conn net.Conn) error {
 	exitCode := 0
 	errorStr := ""
@@ -210,32 +276,4 @@ func copyWithHeader(r io.Reader, w io.Writer, header proto.Header) error {
 		return err
 	}
 	return nil
-}
-
-// withSession wraps the command in a session if screen is available.
-func withSession(ctx context.Context, id string, command *Command, execer Execer, options *Options) (*Command, error) {
-	// If screen is not installed spawn the command normally.
-	_, err := exec.LookPath("screen")
-	if err != nil {
-		flog.Info("`screen` could not be found; session %s will not persist", id)
-		return command, nil
-	}
-
-	var s *Session
-	sessionsMutex.Lock()
-	if rawSession, ok := sessions.Load(id); ok {
-		if s, ok = rawSession.(*Session); !ok {
-			return nil, xerrors.Errorf("found invalid type in session map for ID %s", id)
-		}
-	} else {
-		s = NewSession(id, command, execer, options)
-		sessions.Store(id, s)
-		go func() { // Remove the session from the map once it closes.
-			defer sessions.Delete(id)
-			s.Wait()
-		}()
-	}
-	sessionsMutex.Unlock()
-
-	return s.Attach(ctx)
 }

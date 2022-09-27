@@ -49,14 +49,18 @@ func TestRemoteStdin(t *testing.T) {
 	}
 }
 
-func mockConn(ctx context.Context, t *testing.T, options *Options) (*websocket.Conn, *httptest.Server) {
+func mockConn(ctx context.Context, t *testing.T, wsepServer *Server, options *Options) (*websocket.Conn, *httptest.Server) {
 	mockServerHandler := func(w http.ResponseWriter, r *http.Request) {
 		ws, err := websocket.Accept(w, r, nil)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		err = Serve(r.Context(), ws, LocalExecer{}, options)
+		if wsepServer != nil {
+			err = wsepServer.Serve(r.Context(), ws, LocalExecer{}, options)
+		} else {
+			err = Serve(r.Context(), ws, LocalExecer{}, options)
+		}
 		if err != nil {
 			t.Errorf("failed to serve execer: %v", err)
 			ws.Close(websocket.StatusAbnormalClosure, "failed to serve execer")
@@ -77,7 +81,11 @@ func TestRemoteExec(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	ws, server := mockConn(ctx, t, nil)
+	wsepServer := NewServer()
+	defer wsepServer.Close()
+	defer assert.Equal(t, "no leaked sessions", 0, wsepServer.SessionCount())
+
+	ws, server := mockConn(ctx, t, wsepServer, nil)
 	defer server.Close()
 
 	execer := RemoteExecer(ws)
@@ -89,7 +97,11 @@ func TestRemoteExecFail(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	ws, server := mockConn(ctx, t, nil)
+	wsepServer := NewServer()
+	defer wsepServer.Close()
+	defer assert.Equal(t, "no leaked sessions", 0, wsepServer.SessionCount())
+
+	ws, server := mockConn(ctx, t, wsepServer, nil)
 	defer server.Close()
 
 	execer := RemoteExecer(ws)
@@ -124,7 +136,11 @@ func TestStderrVsStdout(t *testing.T) {
 		stderr bytes.Buffer
 	)
 
-	ws, server := mockConn(ctx, t, nil)
+	wsepServer := NewServer()
+	defer wsepServer.Close()
+	defer assert.Equal(t, "no leaked sessions", 0, wsepServer.SessionCount())
+
+	ws, server := mockConn(ctx, t, wsepServer, nil)
 	defer server.Close()
 
 	execer := RemoteExecer(ws)

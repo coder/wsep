@@ -20,7 +20,11 @@ func TestTTY(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	ws, server := mockConn(ctx, t, nil)
+	wsepServer := NewServer()
+	defer wsepServer.Close()
+	defer assert.Equal(t, "no leaked sessions", 0, wsepServer.SessionCount())
+
+	ws, server := mockConn(ctx, t, wsepServer, nil)
 	defer ws.Close(websocket.StatusInternalError, "")
 	defer server.Close()
 
@@ -67,6 +71,45 @@ func testTTY(ctx context.Context, t *testing.T, e Execer) {
 }
 
 func TestReconnectTTY(t *testing.T) {
+	t.Run("DeprecatedServe", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		command := Command{
+			ID:      uuid.NewString(),
+			Command: "sh",
+			TTY:     true,
+			Stdin:   true,
+			Cols:    100,
+			Rows:    100,
+			Env:     []string{"TERM=xterm"},
+		}
+
+		ws, server := mockConn(ctx, t, nil, nil)
+		defer server.Close()
+
+		process, err := RemoteExecer(ws).Start(ctx, command)
+		assert.Success(t, "start sh", err)
+
+		// Write some unique output.
+		echoCmd := "echo test:$((12+12))"
+		_, err = process.Stdin().Write([]byte(echoCmd + "\n"))
+		assert.Success(t, "write to stdin", err)
+		expected := []string{echoCmd, "test:24"}
+
+		assert.True(t, "find echo", checkStdout(t, process, expected, []string{}))
+
+		// Connect to the same session.
+		ws, server = mockConn(ctx, t, nil, nil)
+		defer server.Close()
+
+		process, err = RemoteExecer(ws).Start(ctx, command)
+		assert.Success(t, "start sh", err)
+
+		// Find the same output.
+		assert.True(t, "find echo", checkStdout(t, process, expected, []string{}))
+	})
+
 	t.Run("NoScreen", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
@@ -83,7 +126,11 @@ func TestReconnectTTY(t *testing.T) {
 			Env:     []string{"TERM=xterm"},
 		}
 
-		ws, server := mockConn(ctx, t, nil)
+		wsepServer := NewServer()
+		defer wsepServer.Close()
+		defer assert.Equal(t, "no leaked sessions", 0, wsepServer.SessionCount())
+
+		ws, server := mockConn(ctx, t, wsepServer, nil)
 		defer server.Close()
 
 		process, err := RemoteExecer(ws).Start(ctx, command)
@@ -98,7 +145,7 @@ func TestReconnectTTY(t *testing.T) {
 		assert.True(t, "find echo", checkStdout(t, process, expected, []string{}))
 
 		// Connect to the same session.
-		ws, server = mockConn(ctx, t, nil)
+		ws, server = mockConn(ctx, t, wsepServer, nil)
 		defer server.Close()
 
 		process, err = RemoteExecer(ws).Start(ctx, command)
@@ -130,11 +177,11 @@ func TestReconnectTTY(t *testing.T) {
 			Env:     []string{"TERM=xterm"},
 		}
 
-		t.Cleanup(func() {
-			Dispose(command.ID)
-		})
+		wsepServer := NewServer()
+		defer wsepServer.Close()
+		defer assert.Equal(t, "no leaked sessions", 0, wsepServer.SessionCount())
 
-		ws, server := mockConn(ctx, t, &Options{
+		ws, server := mockConn(ctx, t, wsepServer, &Options{
 			SessionTimeout: time.Second,
 		})
 		defer server.Close()
@@ -155,7 +202,7 @@ func TestReconnectTTY(t *testing.T) {
 		server.Close()
 
 		// Reconnect.
-		ws, server = mockConn(ctx, t, &Options{
+		ws, server = mockConn(ctx, t, wsepServer, &Options{
 			SessionTimeout: time.Second,
 		})
 		defer server.Close()
@@ -174,7 +221,7 @@ func TestReconnectTTY(t *testing.T) {
 		assert.True(t, "find echo", checkStdout(t, process, expected, []string{}))
 
 		// Make a simultaneously active connection.
-		ws2, server2 := mockConn(ctx, t, &Options{
+		ws2, server2 := mockConn(ctx, t, wsepServer, &Options{
 			// Divide the time to test that the heartbeat keeps it open through multiple
 			// intervals.
 			SessionTimeout: time.Second / 4,
@@ -208,7 +255,7 @@ func TestReconnectTTY(t *testing.T) {
 		time.Sleep(time.Second)
 
 		// The next connection should start a new process.
-		ws, server = mockConn(ctx, t, &Options{
+		ws, server = mockConn(ctx, t, wsepServer, &Options{
 			SessionTimeout: time.Second,
 		})
 		defer server.Close()
@@ -242,11 +289,11 @@ func TestReconnectTTY(t *testing.T) {
 			Env:     []string{"TERM=xterm"},
 		}
 
-		t.Cleanup(func() {
-			Dispose(command.ID)
-		})
+		wsepServer := NewServer()
+		defer wsepServer.Close()
+		defer assert.Equal(t, "no leaked sessions", 0, wsepServer.SessionCount())
 
-		ws, server := mockConn(ctx, t, &Options{
+		ws, server := mockConn(ctx, t, wsepServer, &Options{
 			SessionTimeout: time.Second,
 		})
 		defer server.Close()
@@ -265,7 +312,7 @@ func TestReconnectTTY(t *testing.T) {
 		server.Close()
 
 		// Reconnect; the application should redraw.
-		ws, server = mockConn(ctx, t, &Options{
+		ws, server = mockConn(ctx, t, wsepServer, &Options{
 			SessionTimeout: time.Second,
 		})
 		defer server.Close()
@@ -285,7 +332,7 @@ func TestReconnectTTY(t *testing.T) {
 		server.Close()
 
 		// Reconnect.
-		ws, server = mockConn(ctx, t, &Options{
+		ws, server = mockConn(ctx, t, wsepServer, &Options{
 			SessionTimeout: time.Second,
 		})
 		defer server.Close()
