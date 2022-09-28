@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"cdr.dev/slog/sloggers/slogtest/assert"
+	"golang.org/x/sync/errgroup"
 )
 
 func TestLocalExec(t *testing.T) {
@@ -140,8 +141,18 @@ func TestStdoutVsStderr(t *testing.T) {
 	})
 	assert.Success(t, "start command", err)
 
-	go io.Copy(&stdout, process.Stdout())
-	go io.Copy(&stderr, process.Stderr())
+	var outputgroup errgroup.Group
+	outputgroup.Go(func() error {
+		_, err := io.Copy(&stdout, process.Stdout())
+		return err
+	})
+	outputgroup.Go(func() error {
+		_, err := io.Copy(&stderr, process.Stderr())
+		return err
+	})
+
+	err = outputgroup.Wait()
+	assert.Success(t, "wait for output to drain", err)
 
 	err = process.Wait()
 	assert.Success(t, "wait for process to complete", err)
