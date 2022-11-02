@@ -15,6 +15,7 @@ import (
 	"cdr.dev/slog/sloggers/slogtest/assert"
 	"cdr.dev/wsep/internal/proto"
 	"github.com/google/go-cmp/cmp"
+	"golang.org/x/xerrors"
 	"nhooyr.io/websocket"
 )
 
@@ -82,6 +83,46 @@ func TestRemoteExec(t *testing.T) {
 
 	execer := RemoteExecer(ws)
 	testExecer(ctx, t, execer)
+}
+
+func TestRemoveClose(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	ws, server := mockConn(ctx, t, nil)
+	defer server.Close()
+
+	execer := RemoteExecer(ws)
+	cmd := Command{
+		Command: "/bin/bash",
+		TTY:     true,
+		Stdin:   true,
+		Env:     []string{"TERM=linux"},
+	}
+
+	proc, err := execer.Start(ctx, cmd)
+	assert.Success(t, "execer Start", err)
+
+	i := proc.Stdin()
+	o := proc.Stdout()
+	buf := make([]byte, 2048)
+	_, err = i.Write([]byte("echo foo"))
+	assert.Success(t, "echo", err)
+	bldr := strings.Builder{}
+	for !strings.Contains(bldr.String(), "foo") {
+		n, err := o.Read(buf)
+		if xerrors.Is(err, io.EOF) {
+			break
+		}
+		assert.Success(t, "read", err)
+		_, err = bldr.Write(buf[:n])
+		assert.Success(t, "write to builder", err)
+	}
+	err = proc.Close()
+	assert.Success(t, "close proc", err)
+	// note that proc.Close() also closes the websocket.
 }
 
 func TestRemoteExecFail(t *testing.T) {

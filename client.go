@@ -266,13 +266,18 @@ func (r remoteProcess) Close() error {
 
 func joinErrs(errs ...error) error {
 	var str string
+	foundErr := false
 	for _, e := range errs {
 		if e != nil {
+			foundErr = true
 			if str != "" {
 				str += ", "
 			}
 			str += e.Error()
 		}
 	}
-	return xerrors.New(str)
+	if foundErr {
+		return xerrors.New(str)
+	}
+	return nil
 }
