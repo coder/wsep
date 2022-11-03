@@ -8,7 +8,6 @@ import (
 	"net"
 
 	"cdr.dev/wsep/internal/proto"
-	"golang.org/x/sync/errgroup"
 	"golang.org/x/xerrors"
 	"nhooyr.io/websocket"
 )
@@ -73,30 +72,38 @@ func (r remoteExec) Start(ctx context.Context, c Command) (Process, error) {
 		stdin = disabledStdinWriter{}
 	}
 
-	rp := remoteProcess{
-		ctx:    ctx,
-		conn:   r.conn,
-		cmd:    c,
-		pid:    pidHeader.Pid,
-		done:   make(chan error, 1),
-		stderr: newPipe(),
-		stdout: newPipe(),
-		stdin:  stdin,
+	listenCtx, cancelListen := context.WithCancel(ctx)
+	rp := &remoteProcess{
+		ctx:          ctx,
+		conn:         r.conn,
+		cmd:          c,
+		pid:          pidHeader.Pid,
+		done:         make(chan struct{}),
+		stderr:       newPipe(),
+		stdout:       newPipe(),
+		stdin:        stdin,
+		cancelListen: cancelListen,
 	}
 
-	go rp.listen(ctx)
+	go rp.listen(listenCtx)
 	return rp, nil
 }
 
 type remoteProcess struct {
-	ctx    context.Context
-	cmd    Command
-	conn   *websocket.Conn
-	pid    int
-	done   chan error
-	stdin  io.WriteCloser
-	stdout pipe
-	stderr pipe
+	ctx          context.Context
+	cancelListen func()
+	cmd          Command
+	conn         *websocket.Conn
+	pid          int
+	done         chan struct{}
+	closeErr     error
+	exitCode     *int
+	readErr      error
+	stdin        io.WriteCloser
+	stdout       pipe
+	stdoutErr    error
+	stderr       pipe
+	stderrErr    error
 }
 
 type remoteStdin struct {
@@ -155,87 +162,81 @@ func newPipe() pipe {
 	}
 }
 
-func (r remoteProcess) listen(ctx context.Context) {
-	defer r.conn.Close(websocket.StatusNormalClosure, "normal closure")
+func (r *remoteProcess) listen(ctx context.Context) {
 	defer close(r.done)
+	defer func() {
+		r.closeErr = r.conn.Close(websocket.StatusNormalClosure, "normal closure")
+	}()
+	defer func() {
+		r.stdoutErr = r.stdout.w.Close()
+		r.stderrErr = r.stderr.w.Close()
+	}()
 
-	exitCode := make(chan int, 1)
-	var eg errgroup.Group
-
-	eg.Go(func() error {
-		defer r.stdout.w.Close()
-		defer r.stderr.w.Close()
-
-		buf := make([]byte, maxMessageSize) // max size of one websocket message
-		for ctx.Err() == nil {
-			_, payload, err := r.conn.Read(ctx)
-			if err != nil {
-				return err
-			}
-			headerByt, body := proto.SplitMessage(payload)
-
-			var header proto.Header
-			err = json.Unmarshal(headerByt, &header)
-			if err != nil {
-				continue
-			}
-
-			switch header.Type {
-			case proto.TypeStderr:
-				_, err = io.CopyBuffer(r.stderr.w, bytes.NewReader(body), buf)
-				if err != nil {
-					return err
-				}
-			case proto.TypeStdout:
-				_, err = io.CopyBuffer(r.stdout.w, bytes.NewReader(body), buf)
-				if err != nil {
-					return err
-				}
-			case proto.TypeExitCode:
-				var exitMsg proto.ServerExitCodeHeader
-				err = json.Unmarshal(headerByt, &exitMsg)
-				if err != nil {
-					continue
-				}
-
-				exitCode <- exitMsg.ExitCode
-				return nil
-			}
+	buf := make([]byte, maxMessageSize) // max size of one websocket message
+	for ctx.Err() == nil {
+		_, payload, err := r.conn.Read(ctx)
+		if err != nil {
+			r.readErr = err
+			return
 		}
-		return ctx.Err()
-	})
+		headerByt, body := proto.SplitMessage(payload)
 
-	err := eg.Wait()
-	select {
-	case exitCode := <-exitCode:
-		if exitCode != 0 {
-			r.done <- ExitError{Code: exitCode}
+		var header proto.Header
+		err = json.Unmarshal(headerByt, &header)
+		if err != nil {
+			r.readErr = err
+			return
 		}
-	default:
-		r.done <- err
+
+		switch header.Type {
+		case proto.TypeStderr:
+			_, err = io.CopyBuffer(r.stderr.w, bytes.NewReader(body), buf)
+			if err != nil {
+				r.readErr = err
+				return
+			}
+		case proto.TypeStdout:
+			_, err = io.CopyBuffer(r.stdout.w, bytes.NewReader(body), buf)
+			if err != nil {
+				r.readErr = err
+				return
+			}
+		case proto.TypeExitCode:
+			var exitMsg proto.ServerExitCodeHeader
+			err = json.Unmarshal(headerByt, &exitMsg)
+			if err != nil {
+				r.readErr = err
+				return
+			}
+
+			r.exitCode = &exitMsg.ExitCode
+			return
+		}
 	}
+	// if we get here, the context is done, so use that as the read error
+	r.readErr = ctx.Err()
 }
 
-func (r remoteProcess) Pid() int {
+func (r *remoteProcess) Pid() int {
 	return r.pid
 }
 
-func (r remoteProcess) Stdin() io.WriteCloser {
+func (r *remoteProcess) Stdin() io.WriteCloser {
 	if !r.cmd.Stdin {
 		return disabledStdinWriter{}
 	}
 	return r.stdin
 }
 
-func (r remoteProcess) Stdout() io.Reader {
+func (r *remoteProcess) Stdout() io.Reader {
 	return r.stdout.r
 }
 
-func (r remoteProcess) Stderr() io.Reader {
+func (r *remoteProcess) Stderr() io.Reader {
 	return r.stderr.r
 }
 
-func (r remoteProcess) Resize(ctx context.Context, rows, cols uint16) error {
+func (r *remoteProcess) Resize(ctx context.Context, rows, cols uint16) error {
 	header := proto.ClientResizeHeader{
 		Type: proto.TypeResize,
 		Cols: cols,
@@ -248,20 +249,24 @@ func (r remoteProcess) Resize(ctx context.Context, rows, cols uint16) error {
 	return r.conn.Write(ctx, websocket.MessageBinary, payload)
 }
 
-func (r remoteProcess) Wait() error {
-	select {
-	case err := <-r.done:
-		return err
-	case <-r.ctx.Done():
-		return r.ctx.Err()
+func (r *remoteProcess) Wait() error {
+	<-r.done
+	if r.readErr != nil {
+		return r.readErr
 	}
+	// when listen() closes r.done, either there must be a read error
+	// or exitCode is set non-nil, so it's safe to dereference the pointer
+	// here
+	if *r.exitCode != 0 {
+		return ExitError{Code: *r.exitCode}
+	}
+	return nil
 }
 
-func (r remoteProcess) Close() error {
-	err := r.conn.Close(websocket.StatusNormalClosure, "")
-	err1 := r.stderr.w.Close()
-	err2 := r.stdout.w.Close()
-	return joinErrs(err, err1, err2)
+func (r *remoteProcess) Close() error {
+	r.cancelListen()
+	<-r.done
+	return joinErrs(r.closeErr, r.stdoutErr, r.stderrErr)
 }
 
 func joinErrs(errs ...error) error {

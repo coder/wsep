@@ -3,6 +3,7 @@ package wsep
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"net"
@@ -85,7 +86,7 @@ func TestRemoteExec(t *testing.T) {
 	testExecer(ctx, t, execer)
 }
 
-func TestRemoveClose(t *testing.T) {
+func TestRemoteClose(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -108,10 +109,14 @@ func TestRemoveClose(t *testing.T) {
 	i := proc.Stdin()
 	o := proc.Stdout()
 	buf := make([]byte, 2048)
-	_, err = i.Write([]byte("echo foo"))
+	echoMsgBldr := strings.Builder{}
+	for i := 0; i < 512; i++ {
+		echoMsgBldr.WriteString("g")
+	}
+	_, err = fmt.Fprintf(i, "echo '%s'\r\n", echoMsgBldr.String())
 	assert.Success(t, "echo", err)
 	bldr := strings.Builder{}
-	for !strings.Contains(bldr.String(), "foo") {
+	for !strings.Contains(bldr.String(), echoMsgBldr.String()) {
 		n, err := o.Read(buf)
 		if xerrors.Is(err, io.EOF) {
 			break
@@ -123,6 +128,7 @@ func TestRemoveClose(t *testing.T) {
 	err = proc.Close()
 	assert.Success(t, "close proc", err)
 	// note that proc.Close() also closes the websocket.
+	assert.Success(t, "context", ctx.Err())
 }
 
 func TestRemoteExecFail(t *testing.T) {
