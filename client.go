@@ -38,6 +38,9 @@ type Command struct {
 	WorkingDir string
 }
 
+// Start runs the command on the remote.  Once a command is started, callers should
+// not read from, write to, or close the websocket.  Closing the returned Process will
+// also close the websocket.
 func (r remoteExec) Start(ctx context.Context, c Command) (Process, error) {
 	header := proto.ClientStartHeader{
 		ID:      c.ID,

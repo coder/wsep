@@ -168,7 +168,6 @@ func TestReconnectTTY(t *testing.T) {
 	assert.Success(t, "context", ctx.Err())
 }
 
-
 func findEcho(t *testing.T, process Process, expected []string, notExpected ...string) bool {
 	scanner := bufio.NewScanner(process.Stdout())
 outer:
