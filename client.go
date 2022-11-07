@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"io"
 	"net"
+	"strings"
 
 	"cdr.dev/wsep/internal/proto"
 	"golang.org/x/xerrors"
@@ -83,7 +84,9 @@ func (r remoteExec) Start(ctx context.Context, c Command) (Process, error) {
 		pid:          pidHeader.Pid,
 		done:         make(chan struct{}),
 		stderr:       newPipe(),
+		stderrData:   make(chan []byte),
 		stdout:       newPipe(),
+		stdoutData:   make(chan []byte),
 		stdin:        stdin,
 		cancelListen: cancelListen,
 	}
@@ -105,8 +108,10 @@ type remoteProcess struct {
 	stdin        io.WriteCloser
 	stdout       pipe
 	stdoutErr    error
+	stdoutData   chan []byte
 	stderr       pipe
 	stderrErr    error
+	stderrData   chan []byte
 }
 
 type remoteStdin struct {
@@ -153,29 +158,73 @@ func (r remoteStdin) Close() error {
 }
 
 type pipe struct {
-	r *io.PipeReader
-	w *io.PipeWriter
+	r   *io.PipeReader
+	w   *io.PipeWriter
+	d   chan []byte
+	e   chan error
+	buf []byte
 }
 
 func newPipe() pipe {
 	pr, pw := io.Pipe()
 	return pipe{
-		r: pr,
-		w: pw,
+		r:   pr,
+		w:   pw,
+		d:   make(chan []byte),
+		e:   make(chan error),
+		buf: make([]byte, maxMessageSize),
+	}
+}
+
+// writeCtx writes data to the pipe, or returns if the context is canceled.
+func (p *pipe) writeCtx(ctx context.Context, data []byte) error {
+	// actually do the copy on another goroutine so that we can return if context
+	// is canceled
+	go func() {
+		var err error
+		select {
+		case <-ctx.Done():
+			return
+		case body := <-p.d:
+			_, err = io.CopyBuffer(p.w, bytes.NewReader(body), p.buf)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case p.e <- err:
+			return
+		}
+	}()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case p.d <- data:
+		// data being written.
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case err := <-p.e:
+		return err
 	}
 }
 
 func (r *remoteProcess) listen(ctx context.Context) {
-	defer close(r.done)
-	defer func() {
-		r.closeErr = r.conn.Close(websocket.StatusNormalClosure, "normal closure")
-	}()
 	defer func() {
 		r.stdoutErr = r.stdout.w.Close()
 		r.stderrErr = r.stderr.w.Close()
+
+		r.closeErr = r.conn.Close(websocket.StatusNormalClosure, "normal closure")
+		// If we were in r.conn.Read() we cancel the ctx, the websocket library closes
+		// the websocket before we have a chance to.  This is a normal closure.
+		if r.closeErr != nil && strings.Contains(r.closeErr.Error(), "already wrote close") &&
+			r.readErr != nil && strings.Contains(r.readErr.Error(), "context canceled") {
+			r.closeErr = nil
+		}
+		close(r.done)
 	}()
 
-	buf := make([]byte, maxMessageSize) // max size of one websocket message
 	for ctx.Err() == nil {
 		_, payload, err := r.conn.Read(ctx)
 		if err != nil {
@@ -193,13 +242,13 @@ func (r *remoteProcess) listen(ctx context.Context) {
 
 		switch header.Type {
 		case proto.TypeStderr:
-			_, err = io.CopyBuffer(r.stderr.w, bytes.NewReader(body), buf)
+			err = r.stderr.writeCtx(ctx, body)
 			if err != nil {
 				r.readErr = err
 				return
 			}
 		case proto.TypeStdout:
-			_, err = io.CopyBuffer(r.stdout.w, bytes.NewReader(body), buf)
+			err = r.stdout.writeCtx(ctx, body)
 			if err != nil {
 				r.readErr = err
 				return
@@ -231,10 +280,16 @@ func (r *remoteProcess) Stdin() io.WriteCloser {
 	return r.stdin
 }
 
+// Stdout returns a reader for standard out from the process.  You MUST read from
+// this reader even if you don't care about the data to avoid blocking the
+// websocket.
 func (r *remoteProcess) Stdout() io.Reader {
 	return r.stdout.r
 }
 
+// Stdout returns a reader for standard error from the process.  You MUST read from
+// this reader even if you don't care about the data to avoid blocking the
+// websocket.
 func (r *remoteProcess) Stderr() io.Reader {
 	return r.stderr.r
 }
@@ -269,7 +324,8 @@ func (r *remoteProcess) Wait() error {
 func (r *remoteProcess) Close() error {
 	r.cancelListen()
 	<-r.done
-	return joinErrs(r.closeErr, r.stdoutErr, r.stderrErr)
+	closeErr := r.closeErr
+	return joinErrs(closeErr, r.stdoutErr, r.stderrErr)
 }
 
 func joinErrs(errs ...error) error {

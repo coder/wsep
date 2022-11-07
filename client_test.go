@@ -131,6 +131,75 @@ func TestRemoteClose(t *testing.T) {
 	assert.Success(t, "context", ctx.Err())
 }
 
+// TestRemoteCloseNoData tests we can close a remote process even when there is no new data.
+func TestRemoteCloseNoData(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	ws, server := mockConn(ctx, t, nil)
+	defer server.Close()
+
+	execer := RemoteExecer(ws)
+	cmd := Command{
+		Command: "/bin/bash",
+		TTY:     true,
+		Stdin:   true,
+		Env:     []string{"TERM=linux"},
+	}
+
+	proc, err := execer.Start(ctx, cmd)
+	assert.Success(t, "execer Start", err)
+
+	go io.Copy(io.Discard, proc.Stdout())
+	go io.Copy(io.Discard, proc.Stderr())
+
+	// give it some time to read and discard all data.
+	time.Sleep(100 * time.Millisecond)
+
+	err = proc.Close()
+	assert.Success(t, "close proc", err)
+	// note that proc.Close() also closes the websocket.
+	assert.Success(t, "context", ctx.Err())
+}
+
+// TestRemoteCloseNoData tests we can close a remote process even when there is no new data.
+func TestRemoteClosePartialRead(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	ws, server := mockConn(ctx, t, nil)
+	defer server.Close()
+
+	execer := RemoteExecer(ws)
+	cmd := Command{
+		Command: "/bin/bash",
+		TTY:     true,
+		Stdin:   true,
+		Env:     []string{"TERM=linux"},
+	}
+
+	proc, err := execer.Start(ctx, cmd)
+	assert.Success(t, "execer Start", err)
+
+	go io.Copy(io.Discard, proc.Stderr())
+
+	o := proc.Stdout()
+	// partially read the first output
+	buf := make([]byte, 2)
+	n, err := o.Read(buf)
+	assert.Success(t, "read", err)
+	assert.Equal(t, "read 2 bytes", 2, n)
+	
+	err = proc.Close()
+	assert.Success(t, "close proc", err)
+	// note that proc.Close() also closes the websocket.
+	assert.Success(t, "context", ctx.Err())
+}
+
 func TestRemoteExecFail(t *testing.T) {
 	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
