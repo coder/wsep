@@ -193,7 +193,7 @@ func TestRemoteClosePartialRead(t *testing.T) {
 	n, err := o.Read(buf)
 	assert.Success(t, "read", err)
 	assert.Equal(t, "read 2 bytes", 2, n)
-	
+
 	err = proc.Close()
 	assert.Success(t, "close proc", err)
 	// note that proc.Close() also closes the websocket.
