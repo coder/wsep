@@ -217,9 +217,16 @@ func (r *remoteProcess) listen(ctx context.Context) {
 
 		r.closeErr = r.conn.Close(websocket.StatusNormalClosure, "normal closure")
 		// If we were in r.conn.Read() we cancel the ctx, the websocket library closes
-		// the websocket before we have a chance to.  This is a normal closure.
-		if r.closeErr != nil && strings.Contains(r.closeErr.Error(), "already wrote close") &&
-			r.readErr != nil && strings.Contains(r.readErr.Error(), "context canceled") {
+		// the websocket before we have a chance to.  Unfortunately there is a race in the
+		// the websocket library, where sometimes close frame has already been written before
+		// we even call r.conn.Close(), and sometimes it gets written during our call to
+		// r.conn.Close(), so we need to handle both those cases in examining the error that comes
+		// back. This is a normal closure, so report nil for the error.
+		readCtxCanceled := r.readErr != nil && strings.Contains(r.readErr.Error(), "context canceled")
+		alreadyClosed := r.closeErr != nil &&
+			(strings.Contains(r.closeErr.Error(), "already wrote close") ||
+				strings.Contains(r.closeErr.Error(), "WebSocket closed"))
+		if alreadyClosed && readCtxCanceled {
 			r.closeErr = nil
 		}
 		close(r.done)
