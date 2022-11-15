@@ -3,6 +3,7 @@ package wsep
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"net"
@@ -15,6 +16,7 @@ import (
 	"cdr.dev/slog/sloggers/slogtest/assert"
 	"cdr.dev/wsep/internal/proto"
 	"github.com/google/go-cmp/cmp"
+	"golang.org/x/xerrors"
 	"nhooyr.io/websocket"
 )
 
@@ -89,6 +91,138 @@ func TestRemoteExec(t *testing.T) {
 
 	execer := RemoteExecer(ws)
 	testExecer(ctx, t, execer)
+}
+
+func TestRemoteClose(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	wsepServer := NewServer()
+	defer wsepServer.Close()
+	defer assert.Equal(t, "no leaked sessions", 0, wsepServer.SessionCount())
+
+	ws, server := mockConn(ctx, t, wsepServer, nil)
+	defer server.Close()
+
+	execer := RemoteExecer(ws)
+	cmd := Command{
+		Command: "sh",
+		TTY:     true,
+		Stdin:   true,
+		Cols:    100,
+		Rows:    100,
+		Env:     []string{"TERM=linux"},
+	}
+
+	proc, err := execer.Start(ctx, cmd)
+	assert.Success(t, "execer Start", err)
+
+	i := proc.Stdin()
+	o := proc.Stdout()
+	buf := make([]byte, 2048)
+	echoMsgBldr := strings.Builder{}
+	for i := 0; i < 512; i++ {
+		echoMsgBldr.WriteString("g")
+	}
+	_, err = fmt.Fprintf(i, "echo '%s'\r\n", echoMsgBldr.String())
+	assert.Success(t, "echo", err)
+	bldr := strings.Builder{}
+	for !strings.Contains(bldr.String(), echoMsgBldr.String()) {
+		n, err := o.Read(buf)
+		if xerrors.Is(err, io.EOF) {
+			break
+		}
+		assert.Success(t, "read", err)
+		_, err = bldr.Write(buf[:n])
+		assert.Success(t, "write to builder", err)
+	}
+	err = proc.Close()
+	assert.Success(t, "close proc", err)
+	// note that proc.Close() also closes the websocket.
+	assert.Success(t, "context", ctx.Err())
+}
+
+// TestRemoteCloseNoData tests we can close a remote process even when there is no new data.
+func TestRemoteCloseNoData(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	wsepServer := NewServer()
+	defer wsepServer.Close()
+	defer assert.Equal(t, "no leaked sessions", 0, wsepServer.SessionCount())
+
+	ws, server := mockConn(ctx, t, wsepServer, nil)
+	defer server.Close()
+
+	execer := RemoteExecer(ws)
+	cmd := Command{
+		Command: "sh",
+		TTY:     true,
+		Stdin:   true,
+		Cols:    100,
+		Rows:    100,
+		Env:     []string{"TERM=linux"},
+	}
+
+	proc, err := execer.Start(ctx, cmd)
+	assert.Success(t, "execer Start", err)
+
+	go io.Copy(io.Discard, proc.Stdout())
+	go io.Copy(io.Discard, proc.Stderr())
+
+	// give it some time to read and discard all data.
+	time.Sleep(100 * time.Millisecond)
+
+	err = proc.Close()
+	assert.Success(t, "close proc", err)
+	// note that proc.Close() also closes the websocket.
+	assert.Success(t, "context", ctx.Err())
+}
+
+// TestRemoteCloseNoData tests we can close a remote process even when there is no new data.
+func TestRemoteClosePartialRead(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	wsepServer := NewServer()
+	defer wsepServer.Close()
+	defer assert.Equal(t, "no leaked sessions", 0, wsepServer.SessionCount())
+
+	ws, server := mockConn(ctx, t, wsepServer, nil)
+	defer server.Close()
+
+	execer := RemoteExecer(ws)
+	cmd := Command{
+		Command: "sh",
+		TTY:     true,
+		Stdin:   true,
+		Cols:    100,
+		Rows:    100,
+		Env:     []string{"TERM=linux"},
+	}
+
+	proc, err := execer.Start(ctx, cmd)
+	assert.Success(t, "execer Start", err)
+
+	go io.Copy(io.Discard, proc.Stderr())
+
+	o := proc.Stdout()
+	// partially read the first output
+	buf := make([]byte, 2)
+	n, err := o.Read(buf)
+	assert.Success(t, "read", err)
+	assert.Equal(t, "read 2 bytes", 2, n)
+
+	err = proc.Close()
+	assert.Success(t, "close proc", err)
+	// note that proc.Close() also closes the websocket.
+	assert.Success(t, "context", ctx.Err())
 }
 
 func TestRemoteExecFail(t *testing.T) {
