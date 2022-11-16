@@ -6,26 +6,38 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/xerrors"
 )
 
+// State represents the current state of the session.  States are sequential and
+// will only move forward.
+type State int
+
+const (
+	// StateStarting is the default/start state.
+	StateStarting = iota
+	// StateReady means the session is ready to be attached.
+	StateReady
+	// StateClosing means the session has begun closing.  The underlying process
+	// may still be exiting.
+	StateClosing
+	// StateDone means the session has completely shut down and the process has
+	// exited.
+	StateDone
+)
+
 // Session represents a `screen` session.
 type Session struct {
-	// close receives nil when the session should be closed.
-	close chan struct{}
-	// closing receives nil when the session has begun closing.  The underlying
-	// process may still be exiting.  closing implies ready.
-	closing chan struct{}
 	// command is the original command used to spawn the session.
 	command *Command
+	// cond broadcasts session changes.
+	cond *sync.Cond
 	// configFile is the location of the screen configuration file.
 	configFile string
-	// done receives nil when the session has completely shut down and the process
-	// has exited.  done implies closing and ready.
-	done chan struct{}
-	// error hold any error that occurred while starting the session.
+	// error hold any error that occurred during a state change.
 	error error
 	// execer is used to spawn the session and ready commands.
 	execer Execer
@@ -33,12 +45,11 @@ type Session struct {
 	id string
 	// options holds options for configuring the session.
 	options *Options
-	// ready receives nil when the session is ready to be attached.  error must be
-	// checked after receiving on this channel.
-	ready chan struct{}
 	// socketsDir is the location of the directory where screen should put its
 	// sockets.
 	socketsDir string
+	// state holds the current session state.
+	state State
 	// timer will close the session when it expires.
 	timer *time.Timer
 }
@@ -49,14 +60,12 @@ type Session struct {
 func NewSession(id string, command *Command, execer Execer, options *Options) *Session {
 	tempdir := filepath.Join(os.TempDir(), "coder-screen")
 	s := &Session{
-		close:      make(chan struct{}),
-		closing:    make(chan struct{}),
 		command:    command,
+		cond:       sync.NewCond(&sync.Mutex{}),
 		configFile: filepath.Join(tempdir, "config"),
-		done:       make(chan struct{}),
 		execer:     execer,
 		options:    options,
-		ready:      make(chan struct{}),
+		state:      StateStarting,
 		socketsDir: filepath.Join(tempdir, "sockets"),
 	}
 	go s.lifecycle(id)
@@ -65,53 +74,38 @@ func NewSession(id string, command *Command, execer Execer, options *Options) *S
 
 // lifecycle manages the lifecycle of the session.
 func (s *Session) lifecycle(id string) {
+	// When this context is done the process is dead.
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
-	// Close the session after a timeout.  Timeouts created with AfterFunc can be
-	// reset; we will reset it as long as there are active connections.
-	s.timer = time.AfterFunc(s.options.SessionTimeout, s.Close)
-	defer s.timer.Stop()
-
-	// Close the session down immediately if there was an error and store that
-	// error to emit on Attach() calls.
+	// Close the session down immediately if there was an error.
 	process, err := s.start(ctx, id)
 	if err != nil {
-		s.error = err
-		close(s.ready)
-		close(s.closing)
-		close(s.done)
+		defer cancel()
+		s.setState(StateDone, xerrors.Errorf("process start: %w", err))
 		return
 	}
 
-	// Mark the session as fully done when the process exits.
+	// Close the session after a timeout.  Timeouts created with AfterFunc can be
+	// reset; we will reset it as long as there are active connections.  The
+	// initial timeout for starting up is set here and will probably be less than
+	// the session timeout in most cases.  It should be at least long enough for
+	// screen to be able to start up.
+	s.timer = time.AfterFunc(30*time.Second, s.Close)
+
+	// Emit the done event when the process exits.
 	go func() {
-		err = process.Wait()
+		defer cancel()
+		err := process.Wait()
 		if err != nil {
-			s.error = err
+			err = xerrors.Errorf("process exit: %w", err)
 		}
-		close(s.done)
+		s.setState(StateDone, err)
 	}()
 
-	// Wait until the session is ready to receive attaches.
-	err = s.waitReady(ctx)
-	if err != nil {
-		s.error = err
-		close(s.ready)
-		close(s.closing)
-		// The deferred cancel will kill the process if it is still running which
-		// will then close the done channel.
-		return
-	}
-
-	close(s.ready)
-
-	select {
-	// When the session is closed try gracefully killing the process.
-	case <-s.close:
-		// Mark the session as closing so you can use Wait() to stop attaching new
-		// connections to sessions that are closing down.
-		close(s.closing)
+	// Handle the close event by killing the process.
+	go func() {
+		s.waitForState(StateClosing)
+		s.timer.Stop()
 		// process.Close() will send a SIGTERM allowing screen to clean up.  If we
 		// kill it abruptly the socket will be left behind which is probably
 		// harmless but it causes screen -list to show a bunch of dead sessions.
@@ -119,17 +113,26 @@ func (s *Session) lifecycle(id string) {
 		// directory but it seems ideal to let screen clean up anyway.
 		process.Close()
 		select {
-		case <-s.done:
+		case <-ctx.Done():
 			return // Process exited on its own.
 		case <-time.After(5 * time.Second):
-			// Still running; yield so we can run the deferred cancel which will
-			// forcefully terminate the session.
-			return
+			// Still running; cancel the context to forcefully terminate the process.
+			cancel()
 		}
-	// If the process exits on its own the session is also considered closed.
-	case <-s.done:
-		close(s.closing)
+	}()
+
+	// Wait until the session is ready to receive attaches.
+	err = s.waitReady(ctx)
+	if err != nil {
+		defer cancel()
+		s.setState(StateClosing, xerrors.Errorf("session wait: %w", err))
+		return
 	}
+
+	// Once the session is ready external callers have until their provided
+	// timeout to attach something before the session will close itself.
+	s.timer.Reset(s.options.SessionTimeout)
+	s.setState(StateReady, nil)
 }
 
 // start starts the session.
@@ -167,39 +170,54 @@ func (s *Session) start(ctx context.Context, id string) (Process, error) {
 	return process, nil
 }
 
-// waitReady waits for the session to be ready.  Sometimes if you attach too
-// quickly after spawning screen it will say the session does not exist so this
-// will run a command against the session until it works or times out.
+// waitReady waits for the session to be ready by running a command against the
+// session until it works since sometimes if you attach too quickly after
+// spawning screen it will say the session does not exist.  If the provided
+// context finishes the wait is aborted and the context's error is returned.
 func (s *Session) waitReady(ctx context.Context) error {
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
+	check := func() (bool, error) {
+		// The `version` command seems to be the only command without a side effect
+		// so use it to check whether the session is up.
+		process, err := s.execer.Start(ctx, Command{
+			Command: "screen",
+			Args:    []string{"-S", s.id, "-X", "version"},
+			UID:     s.command.UID,
+			GID:     s.command.GID,
+			Env:     append(s.command.Env, "SCREENDIR="+s.socketsDir),
+		})
+		if err != nil {
+			return true, err
+		}
+		err = process.Wait()
+		// Try the context error in case it canceled while we waited.
+		if ctx.Err() != nil {
+			return true, ctx.Err()
+		}
+		// Session is ready once we executed without an error.
+		// TODO: Should we specifically check for "no screen to be attached
+		// matching"?  That might be the only error we actually want to retry and
+		// otherwise we return immediately.  But this text may not be stable between
+		// screen versions or there could be additional errors that can be retried.
+		return err == nil, nil
+	}
+
+	// Check immediately.
+	if done, err := check(); done {
+		return err
+	}
+
+	// Then check on a timer.
+	ticker := time.NewTicker(250 * time.Millisecond)
+	defer ticker.Stop()
+
 	for {
 		select {
-		case <-s.close:
-			return xerrors.Errorf("session has been closed")
-		case <-s.done:
-			return xerrors.Errorf("session has exited")
 		case <-ctx.Done():
-			return xerrors.Errorf("timed out waiting for session")
-		default:
-			// The `version` command seems to be the only command without a side
-			// effect so use it to check whether the session is up.
-			process, err := s.execer.Start(ctx, Command{
-				Command: "screen",
-				Args:    []string{"-S", s.id, "-X", "version"},
-				UID:     s.command.UID,
-				GID:     s.command.GID,
-				Env:     append(s.command.Env, "SCREENDIR="+s.socketsDir),
-			})
-			if err != nil {
+			return ctx.Err()
+		case <-ticker.C:
+			if done, err := check(); done {
 				return err
 			}
-			err = process.Wait()
-			// TODO: Return error if it is anything but "no screen session found".
-			if err == nil {
-				return nil
-			}
-			time.Sleep(250 * time.Millisecond)
 		}
 	}
 }
@@ -207,10 +225,31 @@ func (s *Session) waitReady(ctx context.Context) error {
 // Attach waits for the session to become attachable and returns a command that
 // can be used to attach to the session.
 func (s *Session) Attach(ctx context.Context) (*Command, error) {
-	<-s.ready
-	if s.error != nil {
-		return nil, s.error
+	state, err := s.waitForState(StateReady)
+	switch state {
+	case StateClosing:
+		if err == nil {
+			// No error means s.Close() was called, either by external code or via the
+			// session timeout.
+			err = xerrors.Errorf("session is closing")
+		}
+		return nil, err
+	case StateDone:
+		if err == nil {
+			// No error means the process exited with zero, probably after being
+			// killed due to a call to s.Close() either externally or via the session
+			// timeout.
+			err = xerrors.Errorf("session is done")
+		}
+		return nil, err
 	}
+
+	// Abort the heartbeat when the session closes.
+	ctx, cancel := context.WithCancel(ctx)
+	go func() {
+		defer cancel()
+		s.waitForStateOrContext(ctx, StateClosing)
+	}()
 
 	go s.heartbeat(ctx)
 
@@ -230,8 +269,7 @@ func (s *Session) Attach(ctx context.Context) (*Command, error) {
 
 // heartbeat keeps the session alive while the provided context is not done.
 func (s *Session) heartbeat(ctx context.Context) {
-	// We just connected so reset the timer now in case it is near the end or this
-	// is the first connection and the timer has not been set yet.
+	// We just connected so reset the timer now in case it is near the end.
 	s.timer.Reset(s.options.SessionTimeout)
 
 	// Reset when the connection closes to ensure the session stays up for the
@@ -243,8 +281,6 @@ func (s *Session) heartbeat(ctx context.Context) {
 
 	for {
 		select {
-		case <-s.closing:
-			return
 		case <-ctx.Done():
 			return
 		case <-heartbeat.C:
@@ -256,18 +292,15 @@ func (s *Session) heartbeat(ctx context.Context) {
 // Wait waits for the session to close.  The underlying process might still be
 // exiting.
 func (s *Session) Wait() {
-	<-s.closing
+	s.waitForState(StateClosing)
 }
 
 // Close attempts to gracefully kill the session's underlying process then waits
 // for the process to exit.  If the session does not exit in a timely manner it
 // forcefully kills the process.
 func (s *Session) Close() {
-	select {
-	case s.close <- struct{}{}:
-	default: // Do not block; the lifecycle has already completed.
-	}
-	<-s.done
+	s.setState(StateClosing, nil)
+	s.waitForState(StateDone)
 }
 
 // ensureSettings writes config settings and creates the socket directory.
@@ -306,4 +339,47 @@ func (s *Session) ensureSettings() error {
 	}
 
 	return os.WriteFile(config, []byte(strings.Join(settings, "\n")), 0o644)
+}
+
+// setState sets and broadcasts the provided state if it is greater than the
+// current state and the error if one has not already been set.
+func (s *Session) setState(state State, err error) {
+	s.cond.L.Lock()
+	defer s.cond.L.Unlock()
+	// Cannot regress states (for example trying to close after the process is
+	// done should leave us in the done state and not the closing state).
+	if state <= s.state {
+		return
+	}
+	// Keep the first error we get.
+	if s.error == nil {
+		s.error = err
+	}
+	s.state = state
+	s.cond.Broadcast()
+}
+
+// waitForState blocks until the state or a greater one is reached.
+func (s *Session) waitForState(state State) (State, error) {
+	s.cond.L.Lock()
+	defer s.cond.L.Unlock()
+	for state > s.state {
+		s.cond.Wait()
+	}
+	return s.state, s.error
+}
+
+// waitForStateOrContext blocks until the state or a greater one is reached or
+// the provided context ends.  If the context ends all goroutines will be woken.
+func (s *Session) waitForStateOrContext(ctx context.Context, state State) {
+	go func() {
+		// Wake up when the context ends.
+		defer s.cond.Broadcast()
+		<-ctx.Done()
+	}()
+	s.cond.L.Lock()
+	defer s.cond.L.Unlock()
+	for ctx.Err() == nil && state > s.state {
+		s.cond.Wait()
+	}
 }
