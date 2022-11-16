@@ -64,7 +64,12 @@ func mockConn(ctx context.Context, t *testing.T, wsepServer *Server, options *Op
 			err = Serve(r.Context(), ws, LocalExecer{}, options)
 		}
 		if err != nil {
-			ws.Close(websocket.StatusInternalError, err.Error())
+			// Max reason string length is 123.
+			errStr := err.Error()
+			if len(errStr) > 123 {
+				errStr = errStr[:123]
+			}
+			ws.Close(websocket.StatusInternalError, errStr)
 			return
 		}
 		ws.Close(websocket.StatusNormalClosure, "normal closure")
