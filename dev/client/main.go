@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"cdr.dev/wsep"
 	"github.com/spf13/pflag"
@@ -20,41 +21,48 @@ import (
 )
 
 type notty struct {
+	timeout time.Duration
 }
 
 func (c *notty) Run(fl *pflag.FlagSet) {
-	do(fl, false, "")
+	do(fl, false, "", c.timeout)
 }
 
 func (c *notty) Spec() cli.CommandSpec {
 	return cli.CommandSpec{
 		Name:  "notty",
-		Usage: "[flags]",
+		Usage: "[flags] <command>",
 		Desc:  `Run a command without tty enabled.`,
 	}
 }
 
+func (c *notty) RegisterFlags(fl *pflag.FlagSet) {
+	fl.DurationVar(&c.timeout, "timeout", 0, "disconnect after specified timeout")
+}
+
 type tty struct {
-	id string
+	id      string
+	timeout time.Duration
 }
 
 func (c *tty) Run(fl *pflag.FlagSet) {
-	do(fl, true, c.id)
+	do(fl, true, c.id, c.timeout)
 }
 
 func (c *tty) Spec() cli.CommandSpec {
 	return cli.CommandSpec{
 		Name:  "tty",
-		Usage: "[id] [flags]",
+		Usage: "[flags] <command>",
 		Desc:  `Run a command with tty enabled.  Use the same ID to reconnect.`,
 	}
 }
 
 func (c *tty) RegisterFlags(fl *pflag.FlagSet) {
 	fl.StringVar(&c.id, "id", "", "sets id for reconnection")
+	fl.DurationVar(&c.timeout, "timeout", 0, "disconnect after the specified timeout")
 }
 
-func do(fl *pflag.FlagSet, tty bool, id string) {
+func do(fl *pflag.FlagSet, tty bool, id string, timeout time.Duration) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -73,12 +81,19 @@ func do(fl *pflag.FlagSet, tty bool, id string) {
 	if len(fl.Args()) > 1 {
 		args = fl.Args()[1:]
 	}
+	width, height, err := term.GetSize(int(os.Stdin.Fd()))
+	if err != nil {
+		flog.Fatal("unable to get term size")
+	}
 	process, err := executor.Start(ctx, wsep.Command{
 		ID:      id,
 		Command: fl.Arg(0),
 		Args:    args,
 		TTY:     tty,
 		Stdin:   true,
+		Rows:    uint16(height),
+		Cols:    uint16(width),
+		Env:     []string{"TERM=" + os.Getenv("TERM")},
 	})
 	if err != nil {
 		flog.Fatal("failed to start remote command: %v", err)
@@ -111,6 +126,15 @@ func do(fl *pflag.FlagSet, tty bool, id string) {
 		defer stdin.Close()
 		io.Copy(stdin, os.Stdin)
 	}()
+
+	if timeout != 0 {
+		timer := time.NewTimer(timeout)
+		defer timer.Stop()
+		go func() {
+			<-timer.C
+			conn.Close(websocket.StatusNormalClosure, "normal closure")
+		}()
+	}
 
 	err = process.Wait()
 	if err != nil {

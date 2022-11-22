@@ -18,4 +18,5 @@ type ServerPidHeader struct {
 type ServerExitCodeHeader struct {
 	Type     string `json:"type"`
 	ExitCode int    `json:"exit_code"`
+	Error    string `json:"error"`
 }

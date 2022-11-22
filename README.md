@@ -12,7 +12,7 @@ Error handling is omitted for brevity.
 
 ```golang
 conn, _, _ := websocket.Dial(ctx, "ws://remote.exec.addr", nil)
-defer conn.Close(websocket.StatusAbnormalClosure, "terminate process")
+defer conn.Close(websocket.StatusNormalClosure, "normal closure")
 
 execer := wsep.RemoteExecer(conn)
 process, _ := execer.Start(ctx, wsep.Command{
@@ -25,7 +25,6 @@ go io.Copy(os.Stderr, process.Stderr())
 go io.Copy(os.Stdout, process.Stdout())
 
 process.Wait()
-conn.Close(websocket.StatusNormalClosure, "normal closure")
 ```
 
 ### Server
@@ -33,10 +32,9 @@ conn.Close(websocket.StatusNormalClosure, "normal closure")
 ```golang
 func (s server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
   conn, _ := websocket.Accept(w, r, nil)
+  defer conn.Close(websocket.StatusNormalClosure, "normal closure")
 
   wsep.Serve(r.Context(), conn, wsep.LocalExecer{})
-
-  ws.Close(websocket.StatusNormalClosure, "normal closure")
 }
 ```
 

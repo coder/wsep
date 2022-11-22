@@ -28,6 +28,8 @@ type Command struct {
 	Args       []string `json:"args"`
 	Stdin      bool     `json:"stdin"`
 	TTY        bool     `json:"tty"`
+	Rows       uint16   `json:"rows"`
+	Cols       uint16   `json:"cols"`
 	UID        uint32   `json:"uid"`
 	GID        uint32   `json:"gid"`
 	Env        []string `json:"env"`

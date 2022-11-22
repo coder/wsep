@@ -51,17 +51,25 @@ func TestRemoteStdin(t *testing.T) {
 	}
 }
 
-func mockConn(ctx context.Context, t *testing.T, options *Options) (*websocket.Conn, *httptest.Server) {
+func mockConn(ctx context.Context, t *testing.T, wsepServer *Server, options *Options) (*websocket.Conn, *httptest.Server) {
 	mockServerHandler := func(w http.ResponseWriter, r *http.Request) {
 		ws, err := websocket.Accept(w, r, nil)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		err = Serve(r.Context(), ws, LocalExecer{}, options)
+		if wsepServer != nil {
+			err = wsepServer.Serve(r.Context(), ws, LocalExecer{}, options)
+		} else {
+			err = Serve(r.Context(), ws, LocalExecer{}, options)
+		}
 		if err != nil {
-			t.Errorf("failed to serve execer: %v", err)
-			ws.Close(websocket.StatusAbnormalClosure, "failed to serve execer")
+			// Max reason string length is 123.
+			errStr := err.Error()
+			if len(errStr) > 123 {
+				errStr = errStr[:123]
+			}
+			ws.Close(websocket.StatusInternalError, errStr)
 			return
 		}
 		ws.Close(websocket.StatusNormalClosure, "normal closure")
@@ -79,7 +87,11 @@ func TestRemoteExec(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	ws, server := mockConn(ctx, t, nil)
+	wsepServer := NewServer()
+	defer wsepServer.Close()
+	defer assert.Equal(t, "no leaked sessions", 0, wsepServer.SessionCount())
+
+	ws, server := mockConn(ctx, t, wsepServer, nil)
 	defer server.Close()
 
 	execer := RemoteExecer(ws)
@@ -92,14 +104,20 @@ func TestRemoteClose(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	ws, server := mockConn(ctx, t, nil)
+	wsepServer := NewServer()
+	defer wsepServer.Close()
+	defer assert.Equal(t, "no leaked sessions", 0, wsepServer.SessionCount())
+
+	ws, server := mockConn(ctx, t, wsepServer, nil)
 	defer server.Close()
 
 	execer := RemoteExecer(ws)
 	cmd := Command{
-		Command: "/bin/bash",
+		Command: "sh",
 		TTY:     true,
 		Stdin:   true,
+		Cols:    100,
+		Rows:    100,
 		Env:     []string{"TERM=linux"},
 	}
 
@@ -138,14 +156,20 @@ func TestRemoteCloseNoData(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	ws, server := mockConn(ctx, t, nil)
+	wsepServer := NewServer()
+	defer wsepServer.Close()
+	defer assert.Equal(t, "no leaked sessions", 0, wsepServer.SessionCount())
+
+	ws, server := mockConn(ctx, t, wsepServer, nil)
 	defer server.Close()
 
 	execer := RemoteExecer(ws)
 	cmd := Command{
-		Command: "/bin/bash",
+		Command: "sh",
 		TTY:     true,
 		Stdin:   true,
+		Cols:    100,
+		Rows:    100,
 		Env:     []string{"TERM=linux"},
 	}
 
@@ -171,14 +195,20 @@ func TestRemoteClosePartialRead(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	ws, server := mockConn(ctx, t, nil)
+	wsepServer := NewServer()
+	defer wsepServer.Close()
+	defer assert.Equal(t, "no leaked sessions", 0, wsepServer.SessionCount())
+
+	ws, server := mockConn(ctx, t, wsepServer, nil)
 	defer server.Close()
 
 	execer := RemoteExecer(ws)
 	cmd := Command{
-		Command: "/bin/bash",
+		Command: "sh",
 		TTY:     true,
 		Stdin:   true,
+		Cols:    100,
+		Rows:    100,
 		Env:     []string{"TERM=linux"},
 	}
 
@@ -205,7 +235,11 @@ func TestRemoteExecFail(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	ws, server := mockConn(ctx, t, nil)
+	wsepServer := NewServer()
+	defer wsepServer.Close()
+	defer assert.Equal(t, "no leaked sessions", 0, wsepServer.SessionCount())
+
+	ws, server := mockConn(ctx, t, wsepServer, nil)
 	defer server.Close()
 
 	execer := RemoteExecer(ws)
@@ -223,9 +257,10 @@ func testExecerFail(ctx context.Context, t *testing.T, execer Execer) {
 	go io.Copy(ioutil.Discard, process.Stdout())
 
 	err = process.Wait()
-	code, ok := err.(ExitError)
+	exitErr, ok := err.(ExitError)
 	assert.True(t, "is exit error", ok)
-	assert.True(t, "exit code is nonzero", code.Code != 0)
+	assert.True(t, "exit code is nonzero", exitErr.ExitCode() != 0)
+	assert.Equal(t, "exit error", exitErr.Error(), "exit status 2")
 	assert.Error(t, "wait for process to error", err)
 }
 
@@ -239,7 +274,11 @@ func TestStderrVsStdout(t *testing.T) {
 		stderr bytes.Buffer
 	)
 
-	ws, server := mockConn(ctx, t, nil)
+	wsepServer := NewServer()
+	defer wsepServer.Close()
+	defer assert.Equal(t, "no leaked sessions", 0, wsepServer.SessionCount())
+
+	ws, server := mockConn(ctx, t, wsepServer, nil)
 	defer server.Close()
 
 	execer := RemoteExecer(ws)

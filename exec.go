@@ -2,7 +2,6 @@ package wsep
 
 import (
 	"context"
-	"fmt"
 	"io"
 
 	"cdr.dev/wsep/internal/proto"
@@ -10,11 +9,18 @@ import (
 
 // ExitError is sent when the command terminates.
 type ExitError struct {
-	Code int
+	code  int
+	error string
 }
 
+// ExitCode returns the exit code of the process.
+func (e ExitError) ExitCode() int {
+	return e.code
+}
+
+// Error returns a string describing why the process errored.
 func (e ExitError) Error() string {
-	return fmt.Sprintf("process exited with code %v", e.Code)
+	return e.error
 }
 
 // Process represents a started command.
@@ -32,8 +38,8 @@ type Process interface {
 	Resize(ctx context.Context, rows, cols uint16) error
 	// Wait returns ExitError when the command terminates with a non-zero exit code.
 	Wait() error
-	// Close terminates the process and underlying connection(s).
-	// It must be called otherwise a connection or process may leak.
+	// Close sends a SIGTERM to the process.  To force a shutdown cancel the
+	// context passed into the execer.
 	Close() error
 }
 
@@ -49,6 +55,8 @@ func mapToProtoCmd(c Command) proto.Command {
 		Args:       c.Args,
 		Stdin:      c.Stdin,
 		TTY:        c.TTY,
+		Rows:       c.Rows,
+		Cols:       c.Cols,
 		UID:        c.UID,
 		GID:        c.GID,
 		Env:        c.Env,
@@ -56,12 +64,14 @@ func mapToProtoCmd(c Command) proto.Command {
 	}
 }
 
-func mapToClientCmd(c proto.Command) Command {
-	return Command{
+func mapToClientCmd(c proto.Command) *Command {
+	return &Command{
 		Command:    c.Command,
 		Args:       c.Args,
 		Stdin:      c.Stdin,
 		TTY:        c.TTY,
+		Rows:       c.Rows,
+		Cols:       c.Cols,
 		UID:        c.UID,
 		GID:        c.GID,
 		Env:        c.Env,

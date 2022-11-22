@@ -3,6 +3,7 @@ package wsep
 import (
 	"io"
 	"os/exec"
+	"syscall"
 
 	"golang.org/x/xerrors"
 )
@@ -29,14 +30,15 @@ func (l *localProcess) Wait() error {
 	err := l.cmd.Wait()
 	if exitErr, ok := err.(*exec.ExitError); ok {
 		return ExitError{
-			Code: exitErr.ExitCode(),
+			code:  exitErr.ExitCode(),
+			error: exitErr.Error(),
 		}
 	}
 	return err
 }
 
 func (l *localProcess) Close() error {
-	return l.cmd.Process.Kill()
+	return l.cmd.Process.Signal(syscall.SIGTERM)
 }
 
 func (l *localProcess) Pid() int {
