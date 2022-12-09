@@ -71,21 +71,22 @@ type Session struct {
 	timer *time.Timer
 }
 
+const attachTimeout = 30 * time.Second
+
 // NewSession sets up a new session.  Any errors with starting are returned on
 // Attach().  The session will close itself if nothing is attached for the
 // duration of the session timeout.
 func NewSession(command *Command, execer Execer, options *Options) *Session {
 	tempdir := filepath.Join(os.TempDir(), "coder-screen")
 	s := &Session{
-		attachTimeout: 30 * time.Second,
-		command:       command,
-		cond:          sync.NewCond(&sync.Mutex{}),
-		configFile:    filepath.Join(tempdir, "config"),
-		execer:        execer,
-		id:            uuid.NewString(),
-		options:       options,
-		state:         StateStarting,
-		socketsDir:    filepath.Join(tempdir, "sockets"),
+		command:    command,
+		cond:       sync.NewCond(&sync.Mutex{}),
+		configFile: filepath.Join(tempdir, "config"),
+		execer:     execer,
+		id:         uuid.NewString(),
+		options:    options,
+		state:      StateStarting,
+		socketsDir: filepath.Join(tempdir, "sockets"),
 	}
 	go s.lifecycle()
 	return s
@@ -102,7 +103,7 @@ func (s *Session) lifecycle() {
 	// The initial timeout for starting up is set here and will probably be far
 	// shorter than the session timeout in most cases.  It should be at least long
 	// enough for the first screen attach to be able to start up the daemon.
-	s.timer = time.AfterFunc(s.attachTimeout, s.Close)
+	s.timer = time.AfterFunc(attachTimeout, s.Close)
 
 	s.setState(StateReady, nil)
 
@@ -121,7 +122,7 @@ func (s *Session) lifecycle() {
 // success state.  The command will be retried until successful, the timeout is
 // reached, or the context ends (in which case the context error is returned).
 func (s *Session) sendCommand(ctx context.Context, command string) error {
-	ctx, cancel := context.WithTimeout(ctx, s.attachTimeout)
+	ctx, cancel := context.WithTimeout(ctx, attachTimeout)
 	defer cancel()
 	run := func() (bool, error) {
 		process, err := s.execer.Start(ctx, Command{
