@@ -113,15 +113,17 @@ func (s *Session) lifecycle() {
 	// example via `exit`).
 	s.waitForState(StateClosing)
 	s.timer.Stop()
-	err = s.sendCommand(context.Background(), "quit")
+	// If the command errors that the session is already gone that is fine.
+	err = s.sendCommand(context.Background(), "quit", []string{"No screen session found"})
 	s.setState(StateDone, err)
 }
 
-// sendCommand runs a screen command against a session.  If the command is quit
-// then the command failing due to the session being missing is considered a
-// success state.  The command will be retried until successful, the timeout is
-// reached, or the context ends (in which case the context error is returned).
-func (s *Session) sendCommand(ctx context.Context, command string) error {
+// sendCommand runs a screen command against a session.  If the command fails
+// with an error matching anything in successErrors it will be considered a
+// success state (for example "no session" when quitting).  The command will be
+// retried until successful, the timeout is reached, or the context ends (in
+// which case the context error is returned).
+func (s *Session) sendCommand(ctx context.Context, command string, successErrors []string) error {
 	ctx, cancel := context.WithTimeout(ctx, attachTimeout)
 	defer cancel()
 	run := func() (bool, error) {
@@ -142,8 +144,10 @@ func (s *Session) sendCommand(ctx context.Context, command string) error {
 			return true, ctx.Err()
 		}
 		details := <-stdout
-		if strings.Contains(details, "No screen session found") && command == "quit" {
-			return true, nil // Session is already gone; nothing more to do.
+		for _, se := range successErrors {
+			if strings.Contains(details, se) {
+				return true, nil
+			}
 		}
 		// Sometimes a command will fail without any error output whatsoever but
 		// will succeed later so all we can do is keep trying.
@@ -230,7 +234,7 @@ func (s *Session) Attach(ctx context.Context) (Process, error) {
 
 	// Version seems to be the only command without a side effect so use it to
 	// wait for the session to come up.
-	err = s.sendCommand(ctx, "version")
+	err = s.sendCommand(ctx, "version", nil)
 	if err != nil {
 		cancel()
 		return nil, err
