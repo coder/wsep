@@ -104,18 +104,16 @@ func (s *Session) lifecycle() {
 	// enough for the first screen attach to be able to start up the daemon.
 	s.timer = time.AfterFunc(s.attachTimeout, s.Close)
 
+	s.setState(StateReady, nil)
+
 	// Handle the close event by asking screen to quit the session.  We have no
 	// way of knowing when the daemon process dies so the Go side will not get
 	// cleaned up until the timeout if the process gets killed externally (for
 	// example via `exit`).
-	go func() {
-		s.waitForState(StateClosing)
-		s.timer.Stop()
-		err := s.sendCommand(context.Background(), "quit")
-		s.setState(StateDone, err)
-	}()
-
-	s.setState(StateReady, nil)
+	s.waitForState(StateClosing)
+	s.timer.Stop()
+	err = s.sendCommand(context.Background(), "quit")
+	s.setState(StateDone, err)
 }
 
 // sendCommand runs a screen command against a session.  If the command is quit
