@@ -357,7 +357,7 @@ func (s *Session) waitForStateOrContext(ctx context.Context, state State) {
 
 // captureStdout captures the first line of stdout.  Screen emits errors to
 // stdout so this allows logging extra context beyond the exit code.
-func captureStdout(process Process) chan string {
+func captureStdout(process Process) <-chan string {
 	stdout := make(chan string, 1)
 	go func() {
 		scanner := bufio.NewScanner(process.Stdout())
