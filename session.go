@@ -3,6 +3,7 @@ package wsep
 import (
 	"bufio"
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -102,7 +103,9 @@ func (s *Session) lifecycle() {
 	// The initial timeout for starting up is set here and will probably be far
 	// shorter than the session timeout in most cases.  It should be at least long
 	// enough for the first screen attach to be able to start up the daemon.
-	s.timer = time.AfterFunc(attachTimeout, s.Close)
+	s.timer = time.AfterFunc(attachTimeout, func() {
+		s.Close("session timeout")
+	})
 
 	s.setState(StateReady, nil)
 
@@ -116,6 +119,8 @@ func (s *Session) lifecycle() {
 	err = s.sendCommand(context.Background(), "quit", []string{"No screen session found"})
 	if err != nil {
 		flog.Error("failed to kill session %s: %v", s.id, err)
+	} else {
+		err = xerrors.Errorf(fmt.Sprintf("session is done"))
 	}
 	s.setState(StateDone, err)
 }
@@ -188,17 +193,8 @@ func (s *Session) Attach(ctx context.Context) (Process, error) {
 	state, err := s.waitForState(StateReady)
 	switch state {
 	case StateClosing:
-		if err == nil {
-			// No error means the session was closed by the user or timeout.
-			err = xerrors.Errorf("session is closing")
-		}
 		return nil, err
 	case StateDone:
-		if err == nil {
-			// No error means the daemon started successfully and was closed by the
-			// user or timeout.
-			err = xerrors.Errorf("session is done")
-		}
 		return nil, err
 	}
 
@@ -276,8 +272,8 @@ func (s *Session) Wait() {
 // Close attempts to gracefully kill the session's underlying process then waits
 // for the process to exit.  If the session does not exit in a timely manner it
 // forcefully kills the process.
-func (s *Session) Close() {
-	s.setState(StateClosing, nil)
+func (s *Session) Close(reason string) {
+	s.setState(StateClosing, xerrors.Errorf(fmt.Sprintf("session is closing: %s", reason)))
 	s.waitForState(StateDone)
 }
 

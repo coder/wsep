@@ -69,7 +69,7 @@ func (srv *Server) SessionCount() int {
 func (srv *Server) Close() {
 	srv.sessions.Range(func(k, rawSession interface{}) bool {
 		if s, ok := rawSession.(*Session); ok {
-			s.Close()
+			s.Close("test cleanup")
 		}
 		return true
 	})
