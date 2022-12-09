@@ -170,8 +170,8 @@ func (s *Session) sendCommand(ctx context.Context, command string) error {
 	}
 }
 
-// Attach waits for the session to become attachable and returns a command that
-// can be used to attach to the session.
+// Attach attaches to the session, waits for the attach to complete, then
+// returns the attached process.
 func (s *Session) Attach(ctx context.Context) (Process, error) {
 	// We need to do this while behind the mutex to ensure another attach does not
 	// come in and spawn a duplicate session.
