@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.coder.com/flog"
 	"golang.org/x/xerrors"
 )
 
@@ -115,6 +116,9 @@ func (s *Session) lifecycle() {
 	s.timer.Stop()
 	// If the command errors that the session is already gone that is fine.
 	err = s.sendCommand(context.Background(), "quit", []string{"No screen session found"})
+	if err != nil {
+		flog.Error("failed to kill session %s: %v", s.id, err)
+	}
 	s.setState(StateDone, err)
 }
 
