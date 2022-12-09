@@ -33,8 +33,6 @@ const (
 
 // Session represents a `screen` session.
 type Session struct {
-	// attachTimeout is how long to wait for an attach or command.
-	attachTimeout time.Duration
 	// command is the original command used to spawn the session.
 	command *Command
 	// cond broadcasts session changes and any accompanying errors.
