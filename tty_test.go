@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -233,16 +234,21 @@ func write(t *testing.T, process Process, input string) {
 	assert.Success(t, "write to stdin", err)
 }
 
+const ansi = "[\u001B\u009B][[\\]()#;?]*(?:(?:(?:[a-zA-Z\\d]*(?:;[a-zA-Z\\d]*)*)?\u0007)|(?:(?:\\d{1,4}(?:;\\d{0,4})*)?[\\dA-PRZcf-ntqry=><~]))"
+
+var re = regexp.MustCompile(ansi)
+
 // checkStdout ensures that expected is in the stdout in the specified order.
 // On the way if anything in unexpected comes up return false.  Return once
 // everything in expected has been found or EOF.
 func checkStdout(t *testing.T, process Process, expected, unexpected []string) bool {
 	t.Helper()
 	i := 0
+	t.Logf("expected: %s unexpected: %s", expected, unexpected)
 	scanner := bufio.NewScanner(process.Stdout())
 	for scanner.Scan() {
 		line := scanner.Text()
-		t.Logf("bash tty stdout = %s", strings.ReplaceAll(line, "\x1b", "ESC"))
+		t.Logf("bash tty stdout = %s", re.ReplaceAllString(line, ""))
 		for _, str := range unexpected {
 			if strings.Contains(line, str) {
 				t.Logf("contains unexpected line %s", line)
@@ -254,8 +260,10 @@ func checkStdout(t *testing.T, process Process, expected, unexpected []string) b
 			i = i + 1
 		}
 		if i == len(expected) {
+			t.Logf("got all expected values from stdout")
 			return true
 		}
 	}
+	t.Logf("reached end of stdout without seeing all expected values")
 	return false
 }
