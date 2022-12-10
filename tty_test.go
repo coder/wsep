@@ -180,7 +180,7 @@ func newServer(t *testing.T) *Server {
 // newSession returns a command for starting/attaching to a session with a
 // context for timing out.
 func newSession(t *testing.T) (context.Context, Command) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	t.Cleanup(cancel)
 
 	command := Command{
