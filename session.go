@@ -150,10 +150,12 @@ func (s *Session) sendCommand(ctx context.Context, command string, successErrors
 		if ctx.Err() != nil {
 			return true, ctx.Err()
 		}
-		details := <-stdout
-		for _, se := range successErrors {
-			if strings.Contains(details, se) {
-				return true, nil
+		if err != nil {
+			details := <-stdout
+			for _, se := range successErrors {
+				if strings.Contains(details, se) {
+					return true, nil
+				}
 			}
 		}
 		// Sometimes a command will fail without any error output whatsoever but
