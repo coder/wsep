@@ -261,6 +261,13 @@ func (s *Session) heartbeat(ctx context.Context) {
 			return
 		case <-heartbeat.C:
 		}
+		// The goroutine that cancels the heartbeat on a close state change might
+		// not run before the next heartbeat which means the heartbeat will start
+		// the timer again.
+		state, _ := s.WaitForState(StateReady)
+		if state > StateReady {
+			return
+		}
 		s.timer.Reset(s.options.SessionTimeout)
 	}
 }
