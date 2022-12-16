@@ -146,7 +146,7 @@ func TestReconnectTTY(t *testing.T) {
 
 		// Try connecting a bunch of sessions at once.
 		var wg sync.WaitGroup
-		for i := 0; i < 100; i++ {
+		for i := 0; i < 10; i++ {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
