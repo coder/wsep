@@ -221,7 +221,20 @@ func (srv *Server) withSession(ctx context.Context, id string, command *Command,
 		if s, ok = rawSession.(*Session); !ok {
 			return nil, xerrors.Errorf("found invalid type in session map for ID %s", id)
 		}
-	} else {
+	}
+
+	// It is possible that the session has closed but the goroutine that waits for
+	// that state and deletes it from the map has not ran yet meaning the session
+	// is still in the map and we grabbed a closing session.  Wait for any pending
+	// state changes and if it is closed create a new session instead.
+	if s != nil {
+		state, _ := s.WaitForState(StateReady)
+		if state > StateReady {
+			s = nil
+		}
+	}
+
+	if s == nil {
 		s = NewSession(command, execer, options)
 		srv.sessions.Store(id, s)
 		go func() { // Remove the session from the map once it closes.
@@ -229,6 +242,7 @@ func (srv *Server) withSession(ctx context.Context, id string, command *Command,
 			s.Wait()
 		}()
 	}
+
 	srv.sessionsMutex.Unlock()
 
 	return s.Attach(ctx)

@@ -113,7 +113,7 @@ func (s *Session) lifecycle() {
 	// way of knowing when the daemon process dies so the Go side will not get
 	// cleaned up until the timeout if the process gets killed externally (for
 	// example via `exit`).
-	s.waitForState(StateClosing)
+	s.WaitForState(StateClosing)
 	s.timer.Stop()
 	// If the command errors that the session is already gone that is fine.
 	err = s.sendCommand(context.Background(), "quit", []string{"No screen session found"})
@@ -192,7 +192,7 @@ func (s *Session) Attach(ctx context.Context) (Process, error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
-	state, err := s.waitForState(StateReady)
+	state, err := s.WaitForState(StateReady)
 	switch state {
 	case StateClosing:
 		return nil, err
@@ -268,7 +268,7 @@ func (s *Session) heartbeat(ctx context.Context) {
 // Wait waits for the session to close.  The underlying process might still be
 // exiting.
 func (s *Session) Wait() {
-	s.waitForState(StateClosing)
+	s.WaitForState(StateClosing)
 }
 
 // Close attempts to gracefully kill the session's underlying process then waits
@@ -276,7 +276,7 @@ func (s *Session) Wait() {
 // forcefully kills the process.
 func (s *Session) Close(reason string) {
 	s.setState(StateClosing, xerrors.Errorf(fmt.Sprintf("session is closing: %s", reason)))
-	s.waitForState(StateDone)
+	s.WaitForState(StateDone)
 }
 
 // ensureSettings writes config settings and creates the socket directory.
@@ -335,8 +335,8 @@ func (s *Session) setState(state State, err error) {
 	s.cond.Broadcast()
 }
 
-// waitForState blocks until the state or a greater one is reached.
-func (s *Session) waitForState(state State) (State, error) {
+// WaitForState blocks until the state or a greater one is reached.
+func (s *Session) WaitForState(state State) (State, error) {
 	s.cond.L.Lock()
 	defer s.cond.L.Unlock()
 	for state > s.state {
