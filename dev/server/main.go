@@ -29,7 +29,7 @@ func serve(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		flog.Error("failed to serve execer: %v", err)
-		ws.Close(websocket.StatusAbnormalClosure, "failed to serve execer")
+		ws.Close(websocket.StatusInternalError, "failed to serve execer")
 		return
 	}
 	ws.Close(websocket.StatusNormalClosure, "normal closure")

@@ -70,7 +70,7 @@ func do(fl *pflag.FlagSet, tty bool, id string, timeout time.Duration) {
 	if err != nil {
 		flog.Fatal("failed to dial remote executor: %v", err)
 	}
-	defer conn.Close(websocket.StatusAbnormalClosure, "terminate process")
+	defer conn.Close(websocket.StatusNormalClosure, "terminate process")
 
 	executor := wsep.RemoteExecer(conn)
 
