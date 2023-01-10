@@ -39,7 +39,13 @@ func TestReconnectTTY(t *testing.T) {
 		server := newServer(t)
 		ctx, command := newSession(t)
 		command.Rows = 0
-		connect(ctx, t, command, server, nil, "rows and cols must be non-zero")
+		command.Cols = 0
+		ps1, _ := connect(ctx, t, command, server, nil, "")
+		expected := writeUnique(t, ps1)
+		assert.True(t, "find initial output", checkStdout(t, ps1, expected, []string{}))
+
+		ps2, _ := connect(ctx, t, command, server, nil, "")
+		assert.True(t, "find reconnected output", checkStdout(t, ps2, expected, []string{}))
 	})
 
 	t.Run("DeprecatedServe", func(t *testing.T) {
@@ -188,8 +194,8 @@ func newSession(t *testing.T) (context.Context, Command) {
 		Command: "sh",
 		TTY:     true,
 		Stdin:   true,
-		Cols:    100,
-		Rows:    100,
+		Cols:    defaultCols,
+		Rows:    defaultRows,
 		Env:     []string{"TERM=xterm"},
 	}
 

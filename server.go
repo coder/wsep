@@ -19,6 +19,11 @@ import (
 	"cdr.dev/wsep/internal/proto"
 )
 
+const (
+	defaultRows = 80
+	defaultCols = 24
+)
+
 // Options allows configuring the server.
 type Options struct {
 	SessionTimeout time.Duration
@@ -138,9 +143,14 @@ func (srv *Server) Serve(ctx context.Context, c *websocket.Conn, execer Execer, 
 			command := mapToClientCmd(header.Command)
 
 			if command.TTY {
-				// Enforce rows and columns so the TTY will be correctly sized.
-				if command.Rows == 0 || command.Cols == 0 {
-					return xerrors.Errorf("rows and cols must be non-zero")
+				// If rows and cols are not provided, default to 80x24.
+				if command.Rows == 0 {
+					flog.Info("rows not provided, defaulting to 80")
+					command.Rows = defaultRows
+				}
+				if command.Cols == 0 {
+					flog.Info("cols not provided, defaulting to 24")
+					command.Cols = defaultCols
 				}
 			}
 
